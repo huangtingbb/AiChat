@@ -1,0 +1,44 @@
+-- 创建数据库（如果不存在）
+CREATE DATABASE IF NOT EXISTS chatbot CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
+-- 使用数据库
+USE chatbot;
+
+-- 用户表
+CREATE TABLE IF NOT EXISTS user (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    avatar VARCHAR(255),
+    role VARCHAR(20) DEFAULT 'user',
+    status INT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+    INDEX idx_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- 聊天会话表
+CREATE TABLE IF NOT EXISTS chat (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    title VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- 消息表
+CREATE TABLE IF NOT EXISTS message (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    chat_id INT UNSIGNED NOT NULL,
+    role VARCHAR(10) NOT NULL COMMENT 'user或assistant',
+    content TEXT NOT NULL,
+    tokens INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+    INDEX idx_chat_id (chat_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci; 
