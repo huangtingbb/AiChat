@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -63,51 +64,62 @@ func main() {
 	log.Printf("当前工作目录: %s", workDir)
 
 	// SQL文件路径
-	sqlFilePath := filepath.Join(workDir, "001_init_schema.sql")
-
-	// 检查文件是否存在
-	if _, err := os.Stat(sqlFilePath); os.IsNotExist(err) {
-		// 如果在当前目录找不到，尝试在上级目录的migrations文件夹中查找
-		parentDir := filepath.Dir(workDir)
-		alternatePath := filepath.Join(parentDir, "migrations", "001_init_schema.sql")
-		log.Printf("在当前目录找不到SQL文件，尝试查找: %s", alternatePath)
-
-		if _, err := os.Stat(alternatePath); os.IsNotExist(err) {
-			log.Fatalf("SQL文件不存在: %s 或 %s", sqlFilePath, alternatePath)
-		}
-		sqlFilePath = alternatePath
+	// 获取所有SQL文件
+	sqlFiles, err := filepath.Glob(filepath.Join(workDir, "*.sql"))
+	if err != nil {
+		log.Fatalf("查找SQL文件失败: %v", err)
 	}
 
-	log.Printf("找到SQL文件: %s", sqlFilePath)
+	// 如果在当前目录找不到SQL文件，尝试在上级目录的migrations文件夹中查找
+	if len(sqlFiles) == 0 {
+		parentDir := filepath.Dir(workDir)
+		sqlFiles, err = filepath.Glob(filepath.Join(parentDir, "migrations", "*.sql"))
+		if err != nil {
+			log.Fatalf("查找SQL文件失败: %v", err)
+		}
+	}
+
+	if len(sqlFiles) == 0 {
+		log.Fatalf("未找到任何SQL文件")
+	}
+
+	// 按文件名排序
+	sort.Strings(sqlFiles)
 
 	// 读取SQL文件
-	content, err := ioutil.ReadFile(sqlFilePath)
-	if err != nil {
-		log.Fatalf("无法读取SQL文件: %v", err)
-	}
+	// 遍历所有SQL文件并执行
+	for _, sqlFile := range sqlFiles {
+		log.Printf("正在执行SQL文件: %s", filepath.Base(sqlFile))
 
-	// 执行SQL语句
-	// 由于GO的数据库驱动一次只能执行一条SQL语句，我们需要分割多条语句
-	statements := strings.Split(string(content), ";")
-	for _, statement := range statements {
-		statement = strings.TrimSpace(statement)
-		if statement == "" {
-			continue
-		}
-
-		// 跳过创建和使用数据库的语句，因为我们已经处理过了
-		if strings.Contains(strings.ToUpper(statement), "CREATE DATABASE") ||
-			strings.Contains(strings.ToUpper(statement), "USE ") {
-			log.Printf("跳过语句: %s", statement)
-			continue
-		}
-
-		_, err = db.Exec(statement)
+		// 读取SQL文件内容
+		content, err := ioutil.ReadFile(sqlFile)
 		if err != nil {
-			log.Printf("警告: 执行SQL语句失败: %v\n语句: %s", err, statement)
-			// 不要因为一条语句失败就退出，继续执行其他语句
-		} else {
-			log.Printf("成功执行SQL语句")
+			log.Printf("警告: 无法读取SQL文件 %s: %v", sqlFile, err)
+			continue
+		}
+
+		// 分割并执行SQL语句
+		statements := strings.Split(string(content), ";")
+		for _, statement := range statements {
+			statement = strings.TrimSpace(statement)
+			if statement == "" {
+				continue
+			}
+
+			// 跳过创建和使用数据库的语句
+			if strings.Contains(strings.ToUpper(statement), "CREATE DATABASE") ||
+				strings.Contains(strings.ToUpper(statement), "USE ") {
+				log.Printf("跳过语句: %s", statement)
+				continue
+			}
+
+			_, err = db.Exec(statement)
+			if err != nil {
+				log.Printf("警告: 执行SQL语句失败: %v\n语句: %s", err, statement)
+				// 继续执行其他语句
+			} else {
+				log.Printf("成功执行SQL语句")
+			}
 		}
 	}
 

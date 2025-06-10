@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { createChat, getUserChats, getChatMessages, sendMessage, updateChatTitle } from '../api/chat'
+import { createChat, getUserChatList, getChatMessages, sendMessage, updateChatTitle, deleteChat } from '../api/chat'
 import { ElMessage } from 'element-plus'
 
 export const useChatStore = defineStore('chat', {
@@ -9,7 +9,8 @@ export const useChatStore = defineStore('chat', {
     messages: [],
     loading: false,
     sending: false,
-    tempChat: null
+    tempChat: null,
+    currentModel: 'deepseek' // 默认模型
   }),
   
   getters: {
@@ -39,10 +40,10 @@ export const useChatStore = defineStore('chat', {
       try {
         this.loading = true
         const response = await createChat({ title })
-        this.chatList.unshift(response.chat)
-        this.currentChatId = response.chat.id
+        this.chatList.unshift(response.data.chat)
+        this.currentChatId = response.data.chat.id
         this.messages = []
-        return response.chat
+        return response.data.chat
       } catch (error) {
         ElMessage.error('创建聊天失败')
         console.error('创建聊天失败:', error)
@@ -91,13 +92,11 @@ export const useChatStore = defineStore('chat', {
     async fetchChatList() {
       try {
         this.loading = true
-        const response = await getUserChats()
-        this.chatList = response.chats
+        const response = await getUserChatList()
+        this.chatList = response.data.chats
         
-        if (this.chatList.length > 0 && !this.currentChatId) {
-          this.currentChatId = this.chatList[0].id
-          await this.fetchMessages(this.currentChatId)
-        }
+        this.currentChatId = null
+        this.messages = []
         
         return this.chatList
       } catch (error) {
@@ -130,7 +129,7 @@ export const useChatStore = defineStore('chat', {
       try {
         this.loading = true
         const response = await getChatMessages(chatId)
-        this.messages = response.messages
+        this.messages = response.data.messages
         return this.messages
       } catch (error) {
         ElMessage.error('获取聊天消息失败')
@@ -141,20 +140,32 @@ export const useChatStore = defineStore('chat', {
       }
     },
     
-    async sendUserMessage(content) {
+    async sendUserMessage(content, modelId = 'deepseek') {
       if (!content.trim()) return
       
       try {
         this.sending = true
+        this.currentModel = modelId // 保存当前使用的模型
         
+        // 创建临时用户消息
         const tempUserMessage = {
           id: Date.now(),
           role: 'user',
           content,
+          model_id: modelId,
           created_at: new Date().toISOString()
         }
+        
+        // 如果没有当前会话，创建一个临时会话
+        if (!this.currentChatId) {
+          this.createTempChat()
+        }
+        
+        // 添加用户消息到当前会话
         this.messages.push(tempUserMessage)
         
+        // 只有当当前是临时会话时，才创建新的聊天
+        let chatId = this.currentChatId
         if (this.currentChatId === 'temp') {
           const savedMessages = [...this.messages]
           
@@ -169,33 +180,69 @@ export const useChatStore = defineStore('chat', {
             return null
           }
           
-          this.currentChatId = newChat.id
+          chatId = newChat.id
+          this.currentChatId = chatId
           this.tempChat = null
           
           this.messages = savedMessages
         }
         
-        const response = await sendMessage(this.currentChatId, { content })
+        // 发送消息时附带模型信息
+        const response = await sendMessage(chatId, { 
+          content,
+          model_id: modelId 
+        })
         
         const userMessageIndex = this.messages.findIndex(msg => msg.id === tempUserMessage.id)
         if (userMessageIndex !== -1) {
-          this.messages[userMessageIndex] = response.user_message
+          this.messages[userMessageIndex] = response.data.user_message
         }
         
-        this.messages.push(response.bot_message)
+        // 确保响应的bot消息中包含模型信息
+        const botMessage = {
+          ...response.data.bot_message,
+          model_id: modelId
+        }
+        
+        this.messages.push(botMessage)
         
         return {
-          userMessage: response.user_message,
-          botMessage: response.bot_message
+          userMessage: response.data.user_message,
+          botMessage
         }
       } catch (error) {
         ElMessage.error('发送消息失败')
         console.error('发送消息失败:', error)
         
-        this.messages = this.messages.filter(msg => msg.id !== Date.now())
+        this.messages = this.messages.filter(msg => msg.id !== tempUserMessage.id)
         return null
       } finally {
         this.sending = false
+      }
+    },
+    
+    async deleteChat(chatId) {
+      try {
+        this.loading = true
+        await deleteChat(chatId)
+        
+        const chatIndex = this.chatList.findIndex(chat => chat.id === chatId)
+        if (chatIndex !== -1) {
+          this.chatList.splice(chatIndex, 1)
+        }
+        
+        if (this.currentChatId === chatId) {
+          this.currentChatId = null
+          this.messages = []
+        }
+        
+        return true
+      } catch (error) {
+        ElMessage.error('删除聊天失败')
+        console.error('删除聊天失败:', error)
+        return false
+      } finally {
+        this.loading = false
       }
     }
   }

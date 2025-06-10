@@ -15,6 +15,8 @@ func InitTables() error {
 		&models.User{},
 		&models.Chat{},
 		&models.Message{},
+		&models.AIModel{},
+		&models.AIModelUsage{},
 	); err != nil {
 		return err
 	}

@@ -1,0 +1,477 @@
+basePath: /
+definitions:
+  utils.Response:
+    properties:
+      code:
+        description: 状态码
+        type: integer
+      data:
+        description: 数据
+      message:
+        description: 消息
+        type: string
+      timestamp:
+        description: 时间戳
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: 这是一个聊天机器人的API文档
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: 聊天机器人API
+  version: "1.0"
+paths:
+  /api/ai/model:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统中所有可用的AI模型列表及当前使用的模型
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 模型列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    current_model:
+                      type: string
+                    models:
+                      type: array
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 获取可用模型列表
+      tags:
+      - AI模型
+  /api/ai/usage:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的AI模型使用记录
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 使用记录
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    total:
+                      type: integer
+                    usage:
+                      type: array
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 获取模型使用情况
+      tags:
+      - AI模型
+  /api/chat:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的所有聊天会话列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 聊天会话列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    chats:
+                      type: array
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 获取聊天会话列表
+      tags:
+      - 聊天
+    post:
+      consumes:
+      - application/json
+      description: 为当前用户创建一个新的聊天会话
+      parameters:
+      - description: 聊天会话标题
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            title:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 创建聊天会话
+      tags:
+      - 聊天
+  /api/chat/{id}/message:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定聊天会话的所有消息
+      parameters:
+      - description: 聊天会话ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 消息列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    messages:
+                      type: array
+                  type: object
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: 聊天会话不存在
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 获取聊天消息列表
+      tags:
+      - 聊天
+    post:
+      consumes:
+      - application/json
+      description: 在指定聊天会话中发送消息并获取AI回复
+      parameters:
+      - description: 聊天会话ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 消息内容与可选模型ID
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            content:
+              type: string
+            model_id:
+              type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 发送成功，返回用户消息、AI回复及指标
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    bot_message:
+                      type: object
+                    metrics:
+                      type: object
+                    user_message:
+                      type: object
+                  type: object
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: 聊天会话不存在
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 发送聊天消息
+      tags:
+      - 聊天
+  /api/user/info:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前登录用户的详细信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 用户信息
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    user:
+                      type: object
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 获取用户信息
+      tags:
+      - 用户
+  /api/user/login:
+    post:
+      consumes:
+      - application/json
+      description: 用户登录并获取认证令牌
+      parameters:
+      - description: 登录信息
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            password:
+              type: string
+            username:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    token:
+                      type: string
+                    user:
+                      type: object
+                  type: object
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: 用户登录
+      tags:
+      - 用户
+  /api/user/logout:
+    post:
+      consumes:
+      - application/json
+      description: 使当前用户退出登录状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 退出成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    user_id:
+                      type: integer
+                  type: object
+              type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - Bearer: []
+      summary: 退出登录
+      tags:
+      - 用户
+  /api/user/register:
+    post:
+      consumes:
+      - application/json
+      description: 创建新用户账号
+      parameters:
+      - description: 注册信息
+        in: body
+        name: data
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+            password:
+              type: string
+            username:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 注册成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  properties:
+                    user:
+                      type: object
+                  type: object
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: 用户注册
+      tags:
+      - 用户
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: 检查API服务是否正常运行
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 返回服务状态
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: 健康检查
+      tags:
+      - 系统
+securityDefinitions:
+  Bearer:
+    description: Bearer JWT token for authentication
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

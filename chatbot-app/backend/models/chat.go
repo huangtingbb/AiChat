@@ -23,7 +23,9 @@ type Message struct {
 	ChatID    uint           `json:"chat_id" gorm:"not null;index"`
 	Role      string         `json:"role" gorm:"size:10;not null"` // user 或 assistant
 	Content   string         `json:"content" gorm:"type:text;not null"`
-	Tokens    int            `json:"tokens" gorm:"default:0"`
+	ModelID   uint           `json:"model_id" gorm:"index"`     // AI模型ID
+	Tokens    int            `json:"tokens" gorm:"default:0"`   // 消息的token数量
+	Metadata  string         `json:"metadata" gorm:"type:json"` // 存储JSON格式的元数据
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-"`

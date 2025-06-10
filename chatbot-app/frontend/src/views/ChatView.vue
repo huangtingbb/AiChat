@@ -18,7 +18,7 @@
           class="chat-item active temp-chat"
         >
           <div class="chat-icon">
-            <i class="el-icon-chat-dot-round"></i>
+            <el-icon><ChatDotRound /></el-icon>
           </div>
           <div class="chat-info">
             <span class="chat-title">{{ chatStore.tempChat.title }}</span>
@@ -33,16 +33,34 @@
           @click="selectChat(chat.id)"
         >
           <div class="chat-icon">
-            <i class="el-icon-chat-dot-round"></i>
+            <el-icon><ChatDotRound /></el-icon>
           </div>
           <div class="chat-info">
             <span class="chat-title">{{ chat.title }}</span>
             <span class="chat-time">{{ formatTime(chat.created_at) }}</span>
           </div>
+          <div class="chat-actions">
+            <el-button 
+              type="link" 
+              size="small" 
+              @click.stop="editChatTitle(chat)"
+              class="edit-action"
+            >
+              <el-icon><Edit /></el-icon>
+            </el-button>
+            <el-button 
+              type="link" 
+              size="small" 
+              @click.stop="confirmDeleteChat(chat.id)"
+              class="delete-action"
+            >
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
         </div>
         <div v-if="chatStore.chatList.length === 0" class="empty-list">
           <div class="empty-icon">
-            <i class="el-icon-chat-line-square"></i>
+            <el-icon><ChatLineSquare /></el-icon>
           </div>
           <p>没有聊天记录</p>
           <p>点击"新建对话"开始聊天</p>
@@ -54,8 +72,8 @@
           <div class="user-avatar">{{ userStore.username.charAt(0).toUpperCase() }}</div>
           <span class="username">{{ userStore.username }}</span>
         </div>
-        <el-button type="text" @click="logout" class="logout-button">
-          <i class="el-icon-switch-button"></i>
+        <el-button type="danger" size="small" @click="logout" class="logout-button">
+          <el-icon><Close /></el-icon> 退出登录
         </el-button>
       </div>
     </div>
@@ -68,7 +86,7 @@
         <div class="title-container">
           <h3 v-if="!isEditingTitle" @click="startEditTitle" class="editable-title">
             {{ chatStore.currentChat?.title || '新对话' }}
-            <i class="el-icon-edit edit-icon"></i>
+            <el-icon class="edit-icon"><Edit /></el-icon>
           </h3>
           <div v-else class="title-edit-form">
             <el-input
@@ -83,7 +101,9 @@
           </div>
         </div>
         <div class="header-actions">
-          <el-button type="text" icon="el-icon-more" class="more-actions"></el-button>
+          <el-button type="link" class="more-actions">
+            <el-icon><More /></el-icon>
+          </el-button>
         </div>
       </div>
       
@@ -98,7 +118,7 @@
         <div class="chat-messages" ref="messagesContainer">
           <div v-if="chatStore.messages.length === 0" class="empty-messages">
             <div class="empty-messages-icon">
-              <i class="el-icon-message"></i>
+              <el-icon><Message /></el-icon>
             </div>
             <p>没有消息，在下方输入框中发送消息开始聊天</p>
           </div>
@@ -136,33 +156,62 @@
           <el-input
             v-model="messageInput"
             type="textarea"
-            :rows="3"
+            :rows="1"
             :autosize="{ minRows: 1, maxRows: 5 }"
-            placeholder="有问题，找我吧，Shift+Enter换行"
+            :placeholder="'在 go 中发消息'"
             @keydown.enter.exact.prevent="sendMessage"
             class="message-textarea"
           />
-          <div class="input-actions">
-            <el-tooltip content="表情" placement="top">
-              <el-button type="text" icon="el-icon-emotion" class="action-button"></el-button>
-            </el-tooltip>
-            <el-tooltip content="上传图片" placement="top">
-              <el-button type="text" icon="el-icon-picture" class="action-button"></el-button>
-            </el-tooltip>
-            <el-button
-              type="primary"
-              :loading="chatStore.sending"
-              @click="sendMessage"
-              :disabled="!messageInput.trim()"
-              class="send-button"
-              round
-            >
-              发送
-            </el-button>
+          
+          <!-- 模型选择和操作按钮 -->
+          <div class="input-model-selection">
+            <div class="model-options">
+              <el-dropdown @command="handleModelSelect" trigger="click" placement="top">
+                <div class="model-option active dropdown-trigger">
+                  {{ selectedModel ? selectedModel.name : 'AI模型' }}
+                  <span class="dropdown-label">
+                    <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
+                  </span>
+                </div>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item 
+                      v-for="model in modelList" 
+                      :key="model.id" 
+                      :command="model"
+                      :disabled="selectedModel && selectedModel.id === model.id"
+                    >
+                      {{ model.name }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            
+            <div class="input-actions">
+              <el-button-group class="action-buttons">
+                <el-button type="link" class="action-button">
+                  <el-icon><FullScreen /></el-icon>
+                </el-button>
+                <el-button type="link" class="action-button">
+                  <el-icon><Upload /></el-icon>
+                </el-button>
+              </el-button-group>
+              <el-button
+                type="primary"
+                circle
+                :loading="chatStore.sending"
+                @click="sendMessage"
+                :disabled="!messageInput.trim()"
+                class="send-button"
+              >
+                <el-icon><Position /></el-icon>
+              </el-button>
+            </div>
           </div>
         </div>
         <div class="input-features">
-          <span class="feature-hint">支持 Markdown 格式</span>
+          <span class="feature-hint">内容由AI生成，仅供参考</span>
         </div>
       </div>
     </div>
@@ -173,8 +222,23 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useUserStore } from '../store/user'
 import { useChatStore } from '../store/chat'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElLoading } from 'element-plus'
 import { marked } from 'marked'
+import { GetAvailableModelList } from '../api/chat'
+// 导入Element Plus图标
+import {
+  Edit,
+  Delete,
+  ChatDotRound,
+  ChatLineSquare,
+  Message,
+  More,
+  Close,
+  FullScreen,
+  Upload,
+  Position,
+  ArrowDown
+} from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const chatStore = useChatStore()
@@ -184,6 +248,60 @@ const messagesContainer = ref(null)
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
 const titleInput = ref(null)
+
+// 模型相关
+const availableModels = ref([]) // 不再预设默认模型
+const selectedModel = ref(null) // 初始化为null，等待接口返回
+const modelList = ref([]) // 从服务器获取的模型列表
+
+// 选择模型的方法
+const selectModel = (model) => {
+  selectedModel.value = model
+}
+
+// 处理下拉菜单选择模型
+const handleModelSelect = (model) => {
+  selectModel(model)
+}
+
+// 获取可用的模型
+const fetchAvailableModels = async () => {
+  const loading = ElLoading.service({
+    lock: true,
+    text: '加载模型中...',
+    background: 'rgba(255, 255, 255, 0.6)'
+  })
+  
+  try {
+    const response = await GetAvailableModelList()
+    
+    // 处理后端返回的模型数据
+    if (response && response.data.models && response.data.models.length > 0) {
+      // 将后端模型数据转换为前端需要的格式
+      modelList.value = response.data.models.map(model => {
+        return {
+          id: model.id,
+          name: model.name,
+          description: model.description
+        }
+      })
+      
+      // 只使用接口返回的current_model作为默认选中模型
+      if (response.data.current_model) {
+        const currentModel = modelList.value.find(m => m.id === response.data.current_model)
+        if (currentModel) {
+          selectedModel.value = currentModel
+        }
+      }
+    } else {
+      console.warn('接口未返回有效的模型数据')
+    }
+  } catch (error) {
+    console.error('获取可用模型失败:', error)
+  } finally {
+    loading.close()
+  }
+}
 
 // 格式化消息内容（支持Markdown）
 const formatMessage = (content) => {
@@ -250,12 +368,14 @@ const sendMessage = async () => {
   const content = messageInput.value
   messageInput.value = ''
   
-  // 如果没有当前聊天，先创建一个临时聊天
+  // 只有在没有当前聊天时，才创建临时聊天
   if (!chatStore.currentChatId) {
     createTempChat()
   }
   
-  await chatStore.sendUserMessage(content)
+  // 将选中的模型ID传递给store
+  const modelId = selectedModel.value ? selectedModel.value.id : null
+  await chatStore.sendUserMessage(content, modelId)
   scrollToBottom()
 }
 
@@ -273,10 +393,10 @@ const logout = () => {
 // 监听消息变化，自动滚动到底部
 watch(() => chatStore.messages.length, scrollToBottom)
 
-// 组件挂载时获取聊天列表
+// 组件挂载时获取聊天列表和可用模型
 onMounted(async () => {
   await chatStore.fetchChatList()
-  scrollToBottom()
+  await fetchAvailableModels()
 })
 </script>
 
@@ -456,8 +576,8 @@ onMounted(async () => {
   padding: 16px;
   border-top: 1px solid var(--border-color);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
   background-color: var(--medium-bg);
 }
 
@@ -465,6 +585,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-bottom: 5px;
 }
 
 .user-avatar {
@@ -491,13 +612,17 @@ onMounted(async () => {
 }
 
 .logout-button {
-  color: var(--muted-text);
+  padding: 6px 12px;
+  border-radius: 4px;
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .logout-button:hover {
-  color: var(--accent-color);
   transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(255, 0, 0, 0.2);
 }
 
 /* ===== 主区域样式 ===== */
@@ -809,42 +934,21 @@ onMounted(async () => {
 
 /* 输入区域 */
 .chat-input-container {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-color);
-  background-color: var(--medium-bg);
+  padding: 12px 24px 16px;
+  background-color: #fff;
   position: relative;
-}
-
-.chat-input-container::before {
-  content: '';
-  position: absolute;
-  top: -1px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(to right, 
-    transparent, 
-    rgba(0, 229, 255, 0.7), 
-    rgba(61, 90, 254, 0.7), 
-    transparent
-  );
 }
 
 .chat-input-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background-color: var(--light-bg);
-  border-radius: 12px;
-  padding: 14px 18px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.2), inset 0 0 10px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--border-color);
+  gap: 8px;
+  border-radius: 8px;
+  padding: 10px 14px;
   transition: all 0.3s ease;
-}
-
-.chat-input-wrapper:focus-within {
-  box-shadow: 0 0 15px var(--shadow-color), inset 0 0 10px rgba(0, 0, 0, 0.1);
-  border-color: var(--accent-color);
+  position: relative;
+  border: 1px solid #e0e0e0;
+  background: #fff;
 }
 
 .message-textarea {
@@ -855,10 +959,10 @@ onMounted(async () => {
   border: none;
   background-color: transparent;
   resize: none;
-  padding: 8px 0;
+  padding: 4px 0;
   font-size: 15px;
   line-height: 1.5;
-  color: var(--text-color);
+  color: #333;
   min-height: 24px;
 }
 
@@ -868,73 +972,132 @@ onMounted(async () => {
 }
 
 .message-textarea :deep(.el-textarea__inner::placeholder) {
-  color: var(--muted-text);
+  color: #999;
+}
+
+/* 模型选择区域 */
+.input-model-selection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.model-options {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none; /* Firefox */
+}
+
+.model-options::-webkit-scrollbar {
+  display: none;
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  background-color: #f5f5f5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  white-space: nowrap;
+  color: #666;
+}
+
+.model-option:hover {
+  background-color: #eeeeee;
+}
+
+.model-option.active {
+  background-color: #e6f4ff;
+  color: #1677ff;
+  border: 1px solid #91caff;
+}
+
+/* 下拉标签样式 */
+.dropdown-trigger {
+  position: relative;
+  padding-right: 26px; /* 为下拉图标留出空间 */
+}
+
+.dropdown-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+  transition: all 0.2s ease;
+}
+
+.model-option:hover .dropdown-label {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.model-option.active .dropdown-label {
+  background-color: rgba(22, 119, 255, 0.2);
+}
+
+.dropdown-icon {
+  font-size: 10px;
+  color: inherit;
 }
 
 .input-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+
+.action-buttons {
+  display: flex;
 }
 
 .action-button {
-  color: var(--muted-text);
+  color: #999;
   font-size: 16px;
-  transition: all 0.3s ease;
-  margin-right: 5px;
+  transition: all 0.2s ease;
+  padding: 0 8px;
 }
 
 .action-button:hover {
-  color: var(--accent-color);
-  transform: translateY(-2px);
+  color: #1677ff;
 }
 
 .send-button {
-  padding: 8px 20px;
-  height: 38px;
-  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1677ff;
   border: none;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.send-button i {
+  font-size: 16px;
 }
 
 .send-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0, 229, 255, 0.3);
-  background: linear-gradient(135deg, var(--accent-color), var(--primary-color));
-}
-
-.send-button:active {
-  transform: translateY(1px);
-}
-
-.send-button::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.send-button:hover::before {
-  opacity: 1;
+  background: #4096ff;
 }
 
 .input-features {
-  padding: 8px 0 0;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.feature-hint {
+  text-align: center;
+  padding-top: 6px;
   font-size: 12px;
-  color: var(--muted-text);
-  opacity: 0.7;
+  color: #999;
 }
 </style>

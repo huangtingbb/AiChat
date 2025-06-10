@@ -8,7 +8,7 @@ This is a chat project, similar to chatgpt
 The backend uses Go, Gin, MySQL 8.0 for the database, and Redis for caching
 Front end using Vue3, choose your own front-end framework
 Carefully check the code before generating each answer to ensure it can be executed
-
 Continuously understand the project intention through dialogue and optimize it
-
+The modified code can be executed immediately without any errors
 reply use Czhinese
+Update readme. md every time there is a change in the directory file

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { login, register, getUserInfo, logout } from '../api/user'
 import { ElMessage } from 'element-plus'
 import router from '../router'
+import { useChatStore } from './chat'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -11,7 +12,7 @@ export const useUserStore = defineStore('user', {
   
   getters: {
     isLoggedIn: (state) => !!state.token,
-    username: (state) => state.userInfo.username || ''
+    username: (state) => state.userInfo?.username || ''
   },
   
   actions: {
@@ -19,12 +20,18 @@ export const useUserStore = defineStore('user', {
     async loginAction(loginData) {
       try {
         const response = await login(loginData)
-        this.token = response.token
-        this.userInfo = response.user
+        this.token = response.data.token
+        this.userInfo = response.data.user || {}
         
         // 保存到本地存储
         localStorage.setItem('token', this.token)
         localStorage.setItem('user', JSON.stringify(this.userInfo))
+        
+        // 清除任何可能的历史聊天状态
+        const chatStore = useChatStore()
+        chatStore.currentChatId = null
+        chatStore.messages = []
+        chatStore.tempChat = null
         
         ElMessage.success('登录成功')
         router.push('/chat')
@@ -54,7 +61,7 @@ export const useUserStore = defineStore('user', {
       
       try {
         const response = await getUserInfo()
-        this.userInfo = response.user
+        this.userInfo = response.data.user || {}
         localStorage.setItem('user', JSON.stringify(this.userInfo))
         return this.userInfo
       } catch (error) {

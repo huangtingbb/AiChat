@@ -1,28 +1,68 @@
 package router
 
 import (
+	"chatbot-app/backend/controller"
+	"chatbot-app/backend/middleware"
+
 	"github.com/gin-gonic/gin"
 
-	"chatbot-app/backend/api"
+	"chatbot-app/backend/utils"
 )
 
-// RegisterAPIRoutes 注册所有API路由
-func RegisterAPIRoutes(apiGroup *gin.RouterGroup) *api.UserAPI {
-	// 注册用户API路由（公开部分）
-	userAPI := api.NewUserAPI()
-	userAPI.RegisterRoutes(apiGroup)
-	
-	return userAPI
+// SetupRouter 配置所有路由
+func SetupRouter(r *gin.Engine) {
+	// 健康检查路由
+	// @Summary 健康检查
+	// @Description 检查API服务是否正常运行
+	// @Tags 系统
+	// @Accept json
+	// @Produce json
+	// @Success 200 {object} utils.Response "返回服务状态"
+	// @Router /health [get]
+	r.GET("/health", healthCheckHandler)
+
+	userController := controller.NewUserController()
+
+	//不需要认证的路由
+	r.POST("/api/user/login", userController.Login)
+	r.POST("/api/user/register", userController.Register)
+
+	// API路由组
+	api := r.Group("/api", middleware.Auth())
+	{
+		user := api.Group("/user")
+		{
+			user.GET("/info", userController.GetUserInfo)
+			user.POST("/logout", userController.Logout)
+		}
+		chat := api.Group("/chat")
+		chatController := controller.NewChatController()
+		{
+			chat.POST("", chatController.CreateChat)
+			chat.GET("", chatController.GetUserChatList)
+			chat.GET("/:id/message", chatController.GetChatMessageList)
+			chat.POST("/:id/message", chatController.SendMessage)
+		}
+		// AI模型相关路由
+		ai := api.Group("/ai")
+		aiModelController := controller.NewAIModelController()
+		{
+			ai.GET("/model", aiModelController.GetAvailableModelList)
+			ai.GET("/model_usage", aiModelController.GetModelUsageHandler)
+		}
+	}
 }
 
-// RegisterProtectedAPIRoutes 注册需要认证的API路由
-func RegisterProtectedAPIRoutes(authGroup *gin.RouterGroup, userAPI *api.UserAPI) {
-	// 注册聊天API路由
-	chatAPI := api.NewChatAPI()
-	chatAPI.RegisterRoutes(authGroup)
-
-	// 注册需要认证的用户API路由
-	userAPI.RegisterProtectedRoutes(authGroup)
-	
-	// 可以在这里添加更多需要认证的API路由
-} 
+// healthCheckHandler 健康检查
+// @Summary 健康检查
+// @Description 检查API服务是否正常运行
+// @Tags 系统
+// @Accept json
+// @Produce json
+// @Success 200 {object} utils.Response "返回服务状态"
+// @Router /health [get]
+func healthCheckHandler(c *gin.Context) {
+	utils.Success(c, gin.H{
+		"status": "ok",
+	})
+}
