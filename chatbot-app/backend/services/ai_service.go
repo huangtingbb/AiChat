@@ -140,33 +140,90 @@ func (s *AiService) GenerateResponse(aiModel *models.AIModel, prompt string, his
 }
 
 // GenerateStreamResponse 生成流式AI回复
-//func (s *AiService) GenerateStreamResponse(prompt string, history []map[string]string, userID uint, callback func(string, error) bool) error {
-//	// 这个方法展示了如何实现流式回复的框架
-//	// 实际项目中需要根据具体的API和需求来实现
-//	// 这里仅作为示例
-//
-//	// 检查输入
-//	if strings.TrimSpace(prompt) == "" {
-//		return errors.New("提问内容不能为空")
-//	}
-//
-//	// 模拟流式响应
-//	// 实际项目中，这里应该调用支持流式响应的AI API
-//	response, _, err := s.GenerateResponse(prompt, history, userID)
-//	if err != nil {
-//		return err
-//	}
-//
-//	// 模拟分段发送响应
-//	// 实际项目中，这里应该处理流式API的响应
-//	words := strings.Split(response, " ")
-//	for _, word := range words {
-//		// 调用回调函数，发送每个词
-//		// 如果回调返回false，表示客户端已断开连接，停止发送
-//		if !callback(word+" ", nil) {
-//			break
-//		}
-//	}
-//
-//	return nil
-//}
+func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt string, history []map[string]string, userID uint, callback func(chunk string, isEnd bool, err error) bool) error {
+	// 检查输入
+	if strings.TrimSpace(prompt) == "" {
+		return errors.New("提问内容不能为空")
+	}
+
+	// 如果没有指定模型，获取默认模型
+	if aiModel == nil {
+		defaultModel, err := s.modelService.GetDefaultModel()
+		if err != nil {
+			return errors.New("获取默认模型失败: " + err.Error())
+		}
+		aiModel = defaultModel
+	}
+
+	// 开始计时
+	startTime := time.Now()
+
+	// 转换历史消息格式
+	aiHistory := utils.ConvertHistoryMessages(history)
+
+	// 获取AI客户端
+	client, err := s.clientFactory.CreateClient(aiModel)
+	if err != nil {
+		// 创建错误记录
+		errorUsage := s.modelService.CreateModelUsageError(userID, aiModel.ID, prompt, "获取AI客户端失败: "+err.Error())
+		if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
+			// 记录日志
+		}
+		return errors.New("获取AI客户端失败: " + err.Error())
+	}
+
+	// 用于收集完整响应以记录使用情况
+	var fullResponse strings.Builder
+	var hasError bool
+
+	// 定义内部回调函数，包装用户回调并处理使用记录
+	internalCallback := func(chunk string, isEnd bool, err error) bool {
+		if err != nil {
+			hasError = true
+			// 创建错误记录
+			errorUsage := s.modelService.CreateModelUsageError(userID, aiModel.ID, prompt, "AI流式生成回复失败: "+err.Error())
+			if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
+				// 记录日志
+			}
+			return callback("", false, err)
+		}
+
+		if isEnd {
+			// 流式响应结束，记录使用情况（如果没有错误）
+			if !hasError {
+				duration := int(time.Since(startTime).Milliseconds())
+				response := fullResponse.String()
+
+				// 创建使用记录（简化的Token计算）
+				promptTokens := len(prompt) / 4       // 简化的Token估算
+				completionTokens := len(response) / 4 // 简化的Token估算
+				usage := s.modelService.CreateModelUsageFromResponse(
+					userID,
+					aiModel.ID,
+					0, // 消息ID后续设置
+					prompt,
+					response,
+					promptTokens,
+					completionTokens,
+					duration,
+				)
+
+				// 记录使用情况
+				if err := s.modelService.RecordModelUsage(usage); err != nil {
+					// 记录日志，但不影响返回结果
+				}
+			}
+
+			return callback("", true, nil) // 通知用户回调流式响应结束
+		}
+
+		// 收集响应内容
+		fullResponse.WriteString(chunk)
+
+		// 调用用户回调
+		return callback(chunk, false, nil)
+	}
+
+	// 调用AI客户端的流式生成回复
+	return client.GenerateStreamResponse(prompt, aiHistory, internalCallback)
+}

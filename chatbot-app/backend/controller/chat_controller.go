@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -179,16 +180,16 @@ func (controller *ChatController) GetChatMessageList(c *gin.Context) {
 	utils.Success(c, gin.H{"messages": messages})
 }
 
-// SendMessage 发送消息
-// @Summary 发送聊天消息
-// @Description 在指定聊天会话中发送消息并获取AI回复
+// SendMessage 发送消息（流式响应）
+// @Summary 发送聊天消息（流式响应）
+// @Description 在指定聊天会话中发送消息并获取AI流式回复
 // @Tags 聊天
 // @Accept json
-// @Produce json
+// @Produce text/event-stream
 // @Security Bearer
 // @Param id path integer true "聊天会话ID"
 // @Param body body object{content=string,model_id=integer} true "消息内容与可选模型ID"
-// @Success 200 {object} utils.Response{data=object{user_message=object,bot_message=object,metrics=object}} "发送成功，返回用户消息、AI回复及指标"
+// @Success 200 {string} string "Server-Sent Events流式响应"
 // @Failure 400 {object} utils.Response "参数错误"
 // @Failure 401 {object} utils.Response "未授权"
 // @Failure 404 {object} utils.Response "聊天会话不存在"
@@ -297,52 +298,140 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 		selectedModel, _ = controller.aiModelService.GetDefaultModel()
 	}
 
-	// 调用AI服务生成回复
-	botResponse, usage, err := controller.aiService.GenerateResponse(selectedModel, req.Content, history, userID)
+	// 设置流式响应头
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Allow-Headers", "Cache-Control")
+
+	// 首先发送用户消息信息
+	userMessageData, _ := json.Marshal(gin.H{
+		"type":    "user_message",
+		"message": userMessage,
+	})
+	c.SSEvent("message", string(userMessageData))
+	c.Writer.Flush()
+
+	// 发送流式开始信号
+	startData, _ := json.Marshal(gin.H{
+		"type": "stream_start",
+		"model": func() string {
+			if selectedModel != nil {
+				return selectedModel.DisplayName
+			}
+			return "未知模型"
+		}(),
+	})
+	c.SSEvent("message", string(startData))
+	c.Writer.Flush()
+
+	// 用于收集完整AI响应和相关数据
+	var fullResponse strings.Builder
+	var botMessage *models.Message
+
+	// 定义流式回调函数
+	streamCallback := func(chunk string, isEnd bool, err error) bool {
+		if err != nil {
+			utils.LogError("AI流式回复失败", err, map[string]interface{}{
+				"user_id": userID,
+				"chat_id": chatID,
+			})
+
+			// 发送错误消息
+			errorData, _ := json.Marshal(gin.H{
+				"type":  "error",
+				"error": "AI生成回复失败: " + err.Error(),
+			})
+			c.SSEvent("message", string(errorData))
+			c.Writer.Flush()
+			return false
+		}
+
+		if isEnd {
+			// 流式响应结束，保存完整回复
+			response := fullResponse.String()
+
+			// 保存AI回复到数据库
+			savedBotMessage, saveErr := controller.chatService.AddMessageWithModelMetadata(
+				uint(chatID),
+				"assistant",
+				response,
+				selectedModel.ID,
+				"", // 元数据稍后更新
+			)
+			if saveErr != nil {
+				utils.LogError("保存AI回复失败", saveErr, map[string]interface{}{
+					"user_id": userID,
+					"chat_id": chatID,
+				})
+
+				// 发送保存错误消息
+				errorData, _ := json.Marshal(gin.H{
+					"type":  "error",
+					"error": "保存回复失败",
+				})
+				c.SSEvent("message", string(errorData))
+				c.Writer.Flush()
+				return false
+			}
+
+			botMessage = savedBotMessage
+
+			// 发送流式结束信号
+			endData, _ := json.Marshal(gin.H{
+				"type":       "stream_end",
+				"message_id": botMessage.ID,
+				"full_text":  response,
+			})
+			c.SSEvent("message", string(endData))
+			c.Writer.Flush()
+
+			return true
+		}
+
+		// 发送文本块
+		fullResponse.WriteString(chunk)
+
+		chunkData, _ := json.Marshal(gin.H{
+			"type": "stream_chunk",
+			"text": chunk,
+		})
+		c.SSEvent("message", string(chunkData))
+		c.Writer.Flush()
+
+		// 检查客户端是否断开连接
+		select {
+		case <-c.Request.Context().Done():
+			utils.LogInfo("客户端断开连接，停止流式传输", map[string]interface{}{
+				"user_id": userID,
+				"chat_id": chatID,
+			})
+			return false
+		default:
+			return true
+		}
+	}
+
+	// 调用AI服务生成流式回复
+	err = controller.aiService.GenerateStreamResponse(selectedModel, req.Content, history, userID, streamCallback)
 	if err != nil {
-		utils.LogError("AI生成回复失败", err, map[string]interface{}{
+		utils.LogError("启动AI流式回复失败", err, map[string]interface{}{
 			"user_id": userID,
 			"chat_id": chatID,
 		})
-		utils.Error(c, "AI生成回复失败: "+err.Error())
+
+		// 发送启动错误消息
+		errorData, _ := json.Marshal(gin.H{
+			"type":  "error",
+			"error": "启动AI回复失败: " + err.Error(),
+		})
+		c.SSEvent("message", string(errorData))
+		c.Writer.Flush()
 		return
 	}
 
-	// 构建元数据
-	metadata := map[string]interface{}{
-		"prompt_tokens":     usage.PromptTokens,
-		"completion_tokens": usage.CompletionTokens,
-		"total_tokens":      usage.TotalTokens,
-		"duration_ms":       usage.Duration,
-	}
-	metadataJSON, _ := json.Marshal(metadata)
-
-	// 保存AI回复
-	botMessage, err := controller.chatService.AddMessageWithModelMetadata(
-		uint(chatID),
-		"assistant",
-		botResponse,
-		usage.ModelID,
-		string(metadataJSON),
-	)
-	if err != nil {
-		utils.LogError("保存AI回复失败", err, map[string]interface{}{
-			"user_id": userID,
-			"chat_id": chatID,
-		})
-		utils.Error(c, err.Error())
-		return
-	}
-
-	// 更新使用记录中的消息ID
-	usage.MessageID = botMessage.ID
-	if err := controller.aiModelService.RecordModelUsage(usage); err != nil {
-		utils.LogWarn("记录模型使用情况失败", map[string]interface{}{
-			"error":   err.Error(),
-			"user_id": userID,
-		})
-	}
-
+	// 记录完成日志
 	var modelName string
 	if selectedModel != nil {
 		modelName = selectedModel.DisplayName
@@ -350,25 +439,16 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 		modelName = "未知模型"
 	}
 
-	utils.LogInfo("AI对话完成", map[string]interface{}{
-		"user_id":           userID,
-		"chat_id":           chatID,
-		"model":             modelName,
-		"duration_ms":       usage.Duration,
-		"prompt_tokens":     usage.PromptTokens,
-		"completion_tokens": usage.CompletionTokens,
-		"total_tokens":      usage.TotalTokens,
-	})
-
-	utils.Success(c, gin.H{
-		"user_message": userMessage,
-		"bot_message":  botMessage,
-		"metrics": gin.H{
-			"model":             modelName,
-			"duration_ms":       usage.Duration,
-			"prompt_tokens":     usage.PromptTokens,
-			"completion_tokens": usage.CompletionTokens,
-			"total_tokens":      usage.TotalTokens,
-		},
+	utils.LogInfo("AI流式对话完成", map[string]interface{}{
+		"user_id": userID,
+		"chat_id": chatID,
+		"model":   modelName,
+		"message_id": func() uint {
+			if botMessage != nil {
+				return botMessage.ID
+			}
+			return 0
+		}(),
+		"response_length": fullResponse.Len(),
 	})
 }

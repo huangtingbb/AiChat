@@ -1,14 +1,16 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/golang-jwt/jwt/v4"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v4"
 )
 
 // Message 消息结构
@@ -31,6 +33,8 @@ type ChatCompletionOptions struct {
 type AIClient interface {
 	// GenerateResponse 生成回复
 	GenerateResponse(prompt string, history []Message) (string, error)
+	// GenerateStreamResponse 生成流式回复
+	GenerateStreamResponse(prompt string, history []Message, callback func(chunk string, isEnd bool, err error) bool) error
 }
 
 // ZhipuClient 智谱AI客户端
@@ -109,6 +113,179 @@ type ChatResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
+}
+
+// StreamResponse 流式响应结构
+type StreamResponse struct {
+	ID      string `json:"id"`
+	Created int64  `json:"created"`
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
+}
+
+// GenerateStreamResponse 实现流式回复
+func (c *ZhipuClient) GenerateStreamResponse(prompt string, history []Message, callback func(chunk string, isEnd bool, err error) bool) error {
+	// 构建消息列表
+	messages := make([]Message, 0, len(history)+1)
+	messages = append(messages, history...)
+	messages = append(messages, Message{
+		Role:    "user",
+		Content: prompt,
+	})
+
+	// 创建流式请求选项
+	streamOptions := &ChatCompletionOptions{
+		MaxTokens:        c.Options.MaxTokens,
+		Temperature:      c.Options.Temperature,
+		TopP:             c.Options.TopP,
+		PresencePenalty:  c.Options.PresencePenalty,
+		FrequencyPenalty: c.Options.FrequencyPenalty,
+		Stream:           true, // 启用流式响应
+	}
+
+	// 调用流式聊天补全API
+	return c.ChatCompletionStream(c.Model, messages, streamOptions, callback)
+}
+
+// ChatCompletionStream 流式聊天补全
+func (c *ZhipuClient) ChatCompletionStream(model string, messages []Message, options *ChatCompletionOptions, callback func(chunk string, isEnd bool, err error) bool) error {
+	if model == "" {
+		model = "glm-4" // 默认使用GLM-4模型
+	}
+
+	// 如果没有提供选项，使用默认选项
+	if options == nil {
+		options = &ChatCompletionOptions{
+			MaxTokens:   2048,
+			Temperature: 0.75,
+			TopP:        0.90,
+			Stream:      true,
+		}
+	}
+
+	// 准备请求数据
+	chatReq := ChatRequest{
+		Model:            model,
+		Messages:         messages,
+		MaxTokens:        options.MaxTokens,
+		Temperature:      options.Temperature,
+		TopP:             options.TopP,
+		Stream:           true, // 强制设置为流式
+		PresencePenalty:  options.PresencePenalty,
+		FrequencyPenalty: options.FrequencyPenalty,
+	}
+
+	reqBody, err := json.Marshal(chatReq)
+	if err != nil {
+		return fmt.Errorf("请求数据序列化失败: %v", err)
+	}
+
+	// 生成Token
+	token, err := c.generateToken()
+	if err != nil {
+		return fmt.Errorf("生成Token失败: %v", err)
+	}
+
+	// 构建HTTP请求
+	req, err := http.NewRequest("POST", c.BaseURL, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return fmt.Errorf("创建HTTP请求失败: %v", err)
+	}
+
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Cache-Control", "no-cache")
+
+	// 发送请求
+	client := &http.Client{Timeout: time.Second * 300} // 增加超时时间以支持流式响应
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("发送请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 检查HTTP状态码
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API请求失败，状态码: %d，响应: %s", resp.StatusCode, string(respBody))
+	}
+
+	// 处理流式响应
+	return c.parseStreamResponse(resp.Body, callback)
+}
+
+// parseStreamResponse 解析流式响应
+func (c *ZhipuClient) parseStreamResponse(body io.Reader, callback func(chunk string, isEnd bool, err error) bool) error {
+	const (
+		dataPrefix = "data: "
+		doneMarker = "[DONE]"
+	)
+
+	scanner := bufio.NewScanner(body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// 跳过空行和注释行
+		if line == "" || strings.HasPrefix(line, ":") {
+			continue
+		}
+
+		// 处理数据行
+		if strings.HasPrefix(line, dataPrefix) {
+			data := strings.TrimPrefix(line, dataPrefix)
+
+			// 检查是否是结束标记
+			if data == doneMarker {
+				// 通知回调函数流式响应结束
+				callback("", true, nil)
+				break
+			}
+
+			// 解析JSON数据
+			var streamResp StreamResponse
+			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+				// 发送错误到回调函数
+				if !callback("", false, fmt.Errorf("解析流式响应失败: %v", err)) {
+					break
+				}
+				continue
+			}
+
+			// 提取内容并发送到回调函数
+			if len(streamResp.Choices) > 0 {
+				content := streamResp.Choices[0].Delta.Content
+				if content != "" {
+					// 如果回调函数返回false，停止处理
+					if !callback(content, false, nil) {
+						break
+					}
+				}
+
+				// 检查是否完成
+				if streamResp.Choices[0].FinishReason != nil && *streamResp.Choices[0].FinishReason != "" {
+					callback("", true, nil)
+					break
+				}
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("读取流式响应失败: %v", err)
+	}
+
+	return nil
 }
 
 // 生成JWT Token

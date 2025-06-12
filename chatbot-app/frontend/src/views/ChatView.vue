@@ -41,7 +41,7 @@
           </div>
           <div class="chat-actions">
             <el-button 
-              type="link" 
+              link 
               size="small" 
               @click.stop="editChatTitle(chat)"
               class="edit-action"
@@ -49,7 +49,7 @@
               <el-icon><Edit /></el-icon>
             </el-button>
             <el-button 
-              type="link" 
+              link 
               size="small" 
               @click.stop="confirmDeleteChat(chat.id)"
               class="delete-action"
@@ -101,9 +101,9 @@
           </div>
         </div>
         <div class="header-actions">
-          <el-button type="link" class="more-actions">
-            <el-icon><More /></el-icon>
-          </el-button>
+          <el-button link class="more-actions">
+          <el-icon><More /></el-icon>
+        </el-button>
         </div>
       </div>
       
@@ -116,7 +116,7 @@
       <template v-else>
         <!-- 聊天消息区域 -->
         <div class="chat-messages" ref="messagesContainer">
-          <div v-if="chatStore.messages.length === 0" class="empty-messages">
+          <div v-if="messagesForRender.length === 0" class="empty-messages">
             <div class="empty-messages-icon">
               <el-icon><Message /></el-icon>
             </div>
@@ -124,8 +124,8 @@
           </div>
           
           <div
-            v-for="(message, index) in chatStore.messages"
-            :key="message.id"
+            v-for="(message, index) in messagesForRender"
+            :key="message._renderKey"
             class="message-container"
           >
             <!-- 如果是助手消息，显示头像 -->
@@ -135,11 +135,27 @@
               class="message"
               :class="[
                 message.role, 
-                { 'continued': index > 0 && chatStore.messages[index - 1].role === message.role }
+                { 
+                  'continued': index > 0 && chatStore.messages[index - 1].role === message.role,
+                  'streaming': message.isStreaming
+                }
               ]"
             >
-              <div class="message-content" v-html="formatMessage(message.content)"></div>
-              <div class="message-time">{{ formatTime(message.created_at) }}</div>
+              <div class="message-content">
+                <div v-html="formatMessage(message.content)"></div>
+                <!-- 流式响应指示器 -->
+                <div v-if="message.isStreaming" class="streaming-indicator">
+                  <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+              <div class="message-time">
+                {{ formatTime(message.created_at) }}
+                <span v-if="message.isStreaming" class="streaming-label">正在输入...</span>
+              </div>
             </div>
             
             <!-- 如果是用户消息，显示头像 -->
@@ -190,10 +206,10 @@
             
             <div class="input-actions">
               <el-button-group class="action-buttons">
-                <el-button type="link" class="action-button">
+                <el-button link class="action-button">
                   <el-icon><FullScreen /></el-icon>
                 </el-button>
-                <el-button type="link" class="action-button">
+                <el-button link class="action-button">
                   <el-icon><Upload /></el-icon>
                 </el-button>
               </el-button-group>
@@ -249,6 +265,15 @@ const isEditingTitle = ref(false)
 const editingTitle = ref('')
 const titleInput = ref(null)
 
+// 计算属性：强制追踪消息变化（需要在所有使用它的地方之前定义）
+const messagesForRender = computed(() => {
+  // 通过计算属性确保响应式更新
+  return chatStore.messages.map((msg, index) => ({
+    ...msg,
+    _renderKey: `${msg.id}_${msg.content?.length || 0}_${chatStore.messageUpdateCount}_${index}`
+  }))
+})
+
 // 模型相关
 const availableModels = ref([]) // 不再预设默认模型
 const selectedModel = ref(null) // 初始化为null，等待接口返回
@@ -303,9 +328,25 @@ const fetchAvailableModels = async () => {
   }
 }
 
+// 配置marked选项
+marked.setOptions({
+  breaks: true, // 支持换行
+  gfm: true, // 启用GitHub风格的Markdown
+  sanitize: false, // 允许HTML（注意安全性）
+  smartLists: true,
+  smartypants: true
+})
+
 // 格式化消息内容（支持Markdown）
 const formatMessage = (content) => {
-  return marked(content)
+  if (!content) return ''
+  
+  try {
+    return marked(content)
+  } catch (error) {
+    console.error('Markdown渲染错误:', error)
+    return content // 如果渲染失败，返回原始内容
+  }
 }
 
 // 格式化时间
@@ -368,15 +409,30 @@ const sendMessage = async () => {
   const content = messageInput.value
   messageInput.value = ''
   
+  console.log('发送消息开始:', {
+    content,
+    currentChatId: chatStore.currentChatId,
+    messagesLength: messagesForRender.value.length,
+    selectedModel: selectedModel.value
+  })
+  
   // 只有在没有当前聊天时，才创建临时聊天
   if (!chatStore.currentChatId) {
+    console.log('创建临时聊天')
     createTempChat()
   }
   
   // 将选中的模型ID传递给store
   const modelId = selectedModel.value ? selectedModel.value.id : null
-  await chatStore.sendUserMessage(content, modelId)
-  scrollToBottom()
+  console.log('调用sendUserMessage，模型ID:', modelId)
+  
+  try {
+    await chatStore.sendUserMessage(content, modelId)
+    console.log('sendUserMessage完成，消息数量:', messagesForRender.value.length)
+    scrollToBottom()
+  } catch (error) {
+    console.error('发送消息失败:', error)
+  }
 }
 
 // 退出登录
@@ -391,7 +447,73 @@ const logout = () => {
 }
 
 // 监听消息变化，自动滚动到底部
-watch(() => chatStore.messages.length, scrollToBottom)
+watch(() => messagesForRender.value.length, (newLength, oldLength) => {
+  console.log('消息数量变化:', oldLength, '->', newLength)
+  console.log('当前消息列表:', messagesForRender.value)
+  nextTick(() => {
+    scrollToBottom()
+  })
+}, { flush: 'post' })
+
+// 监听消息内容变化（用于流式更新时滚动）
+watch(() => messagesForRender.value.map(m => m.content).join(''), 
+  (newContent, oldContent) => {
+    console.log('消息内容变化，长度:', oldContent?.length, '->', newContent?.length)
+    // 只有在有流式消息时才滚动
+    const hasStreamingMessage = messagesForRender.value.some(m => m.isStreaming)
+    if (hasStreamingMessage) {
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
+  },
+  { flush: 'post' }
+)
+
+// 添加深度监听消息数组的变化
+watch(() => messagesForRender.value, (newMessages) => {
+  console.log('消息数组深度监听变化:', newMessages.length, '条消息')
+  console.log('消息详情:', newMessages.map(m => ({
+    id: m.id,
+    role: m.role,
+    contentLength: m.content?.length || 0,
+    isStreaming: m.isStreaming
+  })))
+  // 强制触发滚动
+  nextTick(() => {
+    scrollToBottom()
+  })
+}, { deep: true, flush: 'post' })
+
+// 监听消息更新计数器强制刷新
+watch(() => chatStore.messageUpdateCount, (newCount, oldCount) => {
+  console.log('消息更新计数器变化:', oldCount, '->', newCount, '当前消息数量:', chatStore.messages.length)
+  // 延迟执行确保DOM已更新
+  nextTick(() => {
+    scrollToBottom()
+  })
+}, { flush: 'post' })
+
+// 监听流式消息的内容长度变化，确保实时滚动
+watch(() => messagesForRender.value.filter(m => m.isStreaming).map(m => m.content?.length || 0),
+  (newLengths, oldLengths) => {
+    if (newLengths.some((len, index) => len !== (oldLengths?.[index] || 0))) {
+      console.log('流式消息内容长度变化:', oldLengths, '->', newLengths)
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
+  },
+  { deep: true, flush: 'post' }
+)
+
+// 专门监听store中messages数组的变化
+watch(() => chatStore.messages, (newMessages) => {
+  console.log('Store messages直接监听变化:', newMessages.length, '条消息')
+  nextTick(() => {
+    scrollToBottom()
+  })
+}, { deep: true, flush: 'post' })
 
 // 组件挂载时获取聊天列表和可用模型
 onMounted(async () => {
@@ -907,22 +1029,91 @@ onMounted(async () => {
   word-break: break-word;
 }
 
-/* 支持代码高亮 */
+/* 支持代码高亮和markdown样式 */
 .message-content :deep(pre) {
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0, 0, 0, 0.3);
   border-radius: 6px;
   padding: 12px;
   overflow-x: auto;
   margin: 8px 0;
+  border-left: 3px solid var(--accent-color);
 }
 
 .message-content :deep(code) {
-  font-family: 'Fira Code', monospace;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 13px;
+  background-color: rgba(0, 0, 0, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.message-content :deep(pre code) {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: #e6e6e6;
 }
 
 .message-content :deep(p) {
   margin: 8px 0;
+  line-height: 1.6;
+}
+
+.message-content :deep(ul),
+.message-content :deep(ol) {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.message-content :deep(li) {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.message-content :deep(h1),
+.message-content :deep(h2),
+.message-content :deep(h3),
+.message-content :deep(h4),
+.message-content :deep(h5),
+.message-content :deep(h6) {
+  margin: 12px 0 8px 0;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.message-content :deep(blockquote) {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-color);
+  background-color: rgba(0, 229, 255, 0.05);
+  font-style: italic;
+}
+
+.message-content :deep(table) {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.message-content :deep(th),
+.message-content :deep(td) {
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.message-content :deep(th) {
+  background-color: rgba(0, 229, 255, 0.1);
+  font-weight: 600;
+}
+
+.message-content :deep(a) {
+  color: var(--accent-color);
+  text-decoration: none;
+}
+
+.message-content :deep(a:hover) {
+  text-decoration: underline;
 }
 
 .message-time {
@@ -930,6 +1121,79 @@ onMounted(async () => {
   color: var(--muted-text);
   margin-top: 6px;
   text-align: right;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.streaming-label {
+  font-size: 11px;
+  color: var(--accent-color);
+  font-style: italic;
+}
+
+/* 流式响应样式 */
+.message.streaming {
+  position: relative;
+  overflow: visible;
+}
+
+.message.streaming.assistant {
+  animation: streamingGlow 2s infinite alternate;
+}
+
+@keyframes streamingGlow {
+  0% { 
+    box-shadow: var(--glow-effect);
+  }
+  100% { 
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+  }
+}
+
+.streaming-indicator {
+  display: flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 4px 0;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-color);
+  animation: typing 1.4s infinite ease-in-out;
+  opacity: 0.4;
+}
+
+.typing-dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
 }
 
 /* 输入区域 */
