@@ -3,7 +3,6 @@ package controller
 import (
 	"chatbot-app/backend/services"
 	"chatbot-app/backend/utils"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,17 +36,8 @@ func (controller *UserController) Register(c *gin.Context) {
 		Email    string `json:"email" validate:"required,email" msg_required:"请输入邮箱地址" msg_email:"邮箱格式不正确"`
 	}
 
-	// if err := c.ShouldBindJSON(&req); err != nil {
-	// 	utils.LogWarn("用户注册参数验证失败", map[string]interface{}{
-	// 		"error": err.Error(),
-	// 		"ip":    c.ClientIP(),
-	// 	})
-	// 	utils.InvalidParams(c, err.Error())
-	// 	return
-	// }
-
-	// 使用结构体标签自定义错误消息进行验证
-	if validationError := utils.GetValidationErrorWithTagMessages(req); validationError != "" {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationError := utils.GetValidationErrorWithTagMessages(req)
 		utils.LogWarn("用户注册参数验证失败", map[string]interface{}{
 			"error": validationError,
 			"ip":    c.ClientIP(),
@@ -55,6 +45,16 @@ func (controller *UserController) Register(c *gin.Context) {
 		utils.InvalidParams(c, validationError)
 		return
 	}
+
+	//// 使用结构体标签自定义错误消息进行验证
+	//if validationError := utils.GetValidationErrorWithTagMessages(req); validationError != "" {
+	//	utils.LogWarn("用户注册参数验证失败", map[string]interface{}{
+	//		"error": validationError,
+	//		"ip":    c.ClientIP(),
+	//	})
+	//	utils.InvalidParams(c, validationError)
+	//	return
+	//}
 
 	utils.LogInfo("用户注册请求", map[string]interface{}{
 		"username": req.Username,
@@ -99,13 +99,9 @@ func (controller *UserController) Login(c *gin.Context) {
 		Password string `json:"password" form:"password" binding:"required,min=6" validate:"required,min=6"`
 	}
 
-	//if err := c.ShouldBind(&req); err != nil {
-	//	utils.InvalidParams(c, err.Error())
-	//	return
-	//}
-
-	// 使用自定义验证器进行验证
-	if validationError := utils.GetValidationErrorWithTagMessages(req); validationError != "" {
+	if err := c.ShouldBind(&req); err != nil {
+		// 使用自定义验证器进行验证
+		validationError := utils.GetValidationErrorWithTagMessages(req)
 		utils.LogWarn("用户登录参数验证失败", map[string]interface{}{
 			"error": validationError,
 			"ip":    c.ClientIP(),
