@@ -32,17 +32,27 @@ func NewUserController() *UserController {
 // @Router /api/user/register [post]
 func (controller *UserController) Register(c *gin.Context) {
 	var req struct {
-		Username string `json:"username" binding:"required,min=3,max=50"`
-		Password string `json:"password" binding:"required,min=6,max=50"`
-		Email    string `json:"email" binding:"required,email"`
+		Username string `json:"username" validate:"required,min=3,max=50" msg_required:"请输入用户名" msg_min:"用户名至少需3个字符" msg_max:"用户名不能超过50个字符"`
+		Password string `json:"password" validate:"required,min=6,max=50" msg_required:"请设置密码" msg_min:"密码至少需6位数" msg_max:"密码不能超过50位"`
+		Email    string `json:"email" validate:"required,email" msg_required:"请输入邮箱地址" msg_email:"邮箱格式不正确"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	// if err := c.ShouldBindJSON(&req); err != nil {
+	// 	utils.LogWarn("用户注册参数验证失败", map[string]interface{}{
+	// 		"error": err.Error(),
+	// 		"ip":    c.ClientIP(),
+	// 	})
+	// 	utils.InvalidParams(c, err.Error())
+	// 	return
+	// }
+
+	// 使用结构体标签自定义错误消息进行验证
+	if validationError := utils.GetValidationErrorWithTagMessages(req); validationError != "" {
 		utils.LogWarn("用户注册参数验证失败", map[string]interface{}{
-			"error": err.Error(),
+			"error": validationError,
 			"ip":    c.ClientIP(),
 		})
-		utils.InvalidParams(c, err.Error())
+		utils.InvalidParams(c, validationError)
 		return
 	}
 
@@ -64,7 +74,7 @@ func (controller *UserController) Register(c *gin.Context) {
 	}
 
 	utils.LogInfo("用户注册成功", map[string]interface{}{
-		"user_id":  user.ID,
+		"user_id":  user.Id,
 		"username": user.Username,
 		"ip":       c.ClientIP(),
 	})
@@ -86,51 +96,36 @@ func (controller *UserController) Register(c *gin.Context) {
 func (controller *UserController) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" form:"username" binding:"required" msg_required:"请输入用户名"`
-		Password string `json:"password" form:"password" binding:"required" msg_required:"请输入密码"`
+		Password string `json:"password" form:"password" binding:"required,min=6" validate:"required,min=6"`
 	}
 
-	if err := c.ShouldBind(&req); err != nil {
+	//if err := c.ShouldBind(&req); err != nil {
+	//	utils.InvalidParams(c, err.Error())
+	//	return
+	//}
+
+	// 使用自定义验证器进行验证
+	if validationError := utils.GetValidationErrorWithTagMessages(req); validationError != "" {
 		utils.LogWarn("用户登录参数验证失败", map[string]interface{}{
-			"error": err.Error(),
+			"error": validationError,
 			"ip":    c.ClientIP(),
 		})
-		utils.InvalidParams(c, err.Error())
+		utils.InvalidParams(c, validationError)
 		return
 	}
 
-	utils.LogInfo("用户登录请求", map[string]interface{}{
-		"username": req.Username,
-		"ip":       c.ClientIP(),
-	})
-
 	user, err := controller.userService.Login(req.Username, req.Password)
 	if err != nil {
-		utils.LogWarn("用户登录失败", map[string]interface{}{
-			"username": req.Username,
-			"error":    err.Error(),
-			"ip":       c.ClientIP(),
-		})
 		utils.Error(c, err.Error())
 		return
 	}
 
 	// 生成JWT
-	token, err := utils.GenerateToken(user.ID)
+	token, err := utils.GenerateToken(user.Id)
 	if err != nil {
-		utils.LogError("生成token失败", err, map[string]interface{}{
-			"user_id": user.ID,
-			"ip":      c.ClientIP(),
-		})
 		utils.Error(c, "生成token失败")
 		return
 	}
-
-	utils.LogInfo("用户登录成功", map[string]interface{}{
-		"user_id":  user.ID,
-		"username": user.Username,
-		"ip":       c.ClientIP(),
-	})
-
 	utils.SuccessWithMsg(c, "登录成功", gin.H{
 		"token": token,
 		"user":  user,
@@ -150,7 +145,7 @@ func (controller *UserController) Login(c *gin.Context) {
 // @Failure 500 {object} utils.Response "服务器错误"
 // @Router /api/user/info [get]
 func (controller *UserController) GetUserInfo(c *gin.Context) {
-	// 从JWT中获取用户ID
+	// 从JWT中获取用户Id
 	claims, exists := c.Get("claims")
 	if !exists {
 		utils.LogWarn("获取用户信息失败：未授权", map[string]interface{}{
@@ -162,10 +157,10 @@ func (controller *UserController) GetUserInfo(c *gin.Context) {
 
 	userClaims := claims.(*utils.Claims)
 
-	user, err := controller.userService.GetUserByID(userClaims.UserID)
+	user, err := controller.userService.GetUserById(userClaims.UserId)
 	if err != nil {
 		utils.LogWarn(err.Error(), map[string]interface{}{
-			"user_id": userClaims.UserID,
+			"user_id": userClaims.UserId,
 			"error":   err.Error(),
 			"ip":      c.ClientIP(),
 		})
@@ -188,7 +183,7 @@ func (controller *UserController) GetUserInfo(c *gin.Context) {
 // @Failure 500 {object} utils.Response "服务器错误"
 // @Router /api/user/logout [post]
 func (controller *UserController) Logout(c *gin.Context) {
-	// 从JWT中获取用户ID
+	// 从JWT中获取用户Id
 	claims, exists := c.Get("claims")
 	if !exists {
 		utils.Unauthorized(c, "未授权")
@@ -198,11 +193,11 @@ func (controller *UserController) Logout(c *gin.Context) {
 	userClaims := claims.(*utils.Claims)
 
 	utils.LogInfo("用户退出登录", map[string]interface{}{
-		"user_id": userClaims.UserID,
+		"user_id": userClaims.UserId,
 		"ip":      c.ClientIP(),
 	})
 
 	utils.SuccessWithMsg(c, "退出成功", gin.H{
-		"user_id": userClaims.UserID,
+		"user_id": userClaims.UserId,
 	})
 }

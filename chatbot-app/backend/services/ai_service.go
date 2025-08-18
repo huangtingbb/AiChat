@@ -80,7 +80,7 @@ func (s *AiService) loadDefaultModelFromDB() {
 }
 
 // GenerateResponse 生成AI回复
-func (s *AiService) GenerateResponse(aiModel *models.AIModel, prompt string, history []map[string]string, userID uint) (string, *models.AIModelUsage, error) {
+func (s *AiService) GenerateResponse(aiModel *models.AIModel, prompt string, history []map[string]string, userId uint) (string, *models.AIModelUsage, error) {
 	if strings.TrimSpace(prompt) == "" {
 		return "", nil, errors.New("提问内容不能为空")
 	}
@@ -95,7 +95,7 @@ func (s *AiService) GenerateResponse(aiModel *models.AIModel, prompt string, his
 	client, err := s.clientFactory.CreateClient(aiModel)
 	if err != nil {
 		// 创建错误记录
-		errorUsage := s.modelService.CreateModelUsageError(userID, aiModel.ID, prompt, "获取AI客户端失败: "+err.Error())
+		errorUsage := s.modelService.CreateModelUsageError(userId, aiModel.Id, prompt, "获取AI客户端失败: "+err.Error())
 		if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
 			// 记录日志
 		}
@@ -106,7 +106,7 @@ func (s *AiService) GenerateResponse(aiModel *models.AIModel, prompt string, his
 	response, err := client.GenerateResponse(prompt, aiHistory)
 	if err != nil {
 		// 创建错误记录
-		errorUsage := s.modelService.CreateModelUsageError(userID, aiModel.ID, prompt, "AI生成回复失败: "+err.Error())
+		errorUsage := s.modelService.CreateModelUsageError(userId, aiModel.Id, prompt, "AI生成回复失败: "+err.Error())
 		if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
 			// 记录日志
 		}
@@ -121,9 +121,9 @@ func (s *AiService) GenerateResponse(aiModel *models.AIModel, prompt string, his
 	promptTokens := len(prompt) / 4       // 简化的Token估算
 	completionTokens := len(response) / 4 // 简化的Token估算
 	usage := s.modelService.CreateModelUsageFromResponse(
-		userID,
-		aiModel.ID,
-		0, // 消息ID后续设置
+		userId,
+		aiModel.Id,
+		0, // 消息Id后续设置
 		prompt,
 		response,
 		promptTokens,
@@ -140,7 +140,7 @@ func (s *AiService) GenerateResponse(aiModel *models.AIModel, prompt string, his
 }
 
 // GenerateStreamResponse 生成流式AI回复
-func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt string, history []map[string]string, userID uint, callback func(chunk string, isEnd bool, err error) bool) error {
+func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt string, history []map[string]string, userId uint, callback func(chunk string, isEnd bool, err error) bool) error {
 	// 检查输入
 	if strings.TrimSpace(prompt) == "" {
 		return errors.New("提问内容不能为空")
@@ -165,7 +165,7 @@ func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt strin
 	client, err := s.clientFactory.CreateClient(aiModel)
 	if err != nil {
 		// 创建错误记录
-		errorUsage := s.modelService.CreateModelUsageError(userID, aiModel.ID, prompt, "获取AI客户端失败: "+err.Error())
+		errorUsage := s.modelService.CreateModelUsageError(userId, aiModel.Id, prompt, "获取AI客户端失败: "+err.Error())
 		if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
 			// 记录日志
 		}
@@ -181,7 +181,7 @@ func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt strin
 		if err != nil {
 			hasError = true
 			// 创建错误记录
-			errorUsage := s.modelService.CreateModelUsageError(userID, aiModel.ID, prompt, "AI流式生成回复失败: "+err.Error())
+			errorUsage := s.modelService.CreateModelUsageError(userId, aiModel.Id, prompt, "AI流式生成回复失败: "+err.Error())
 			if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
 				// 记录日志
 			}
@@ -198,9 +198,9 @@ func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt strin
 				promptTokens := len(prompt) / 4       // 简化的Token估算
 				completionTokens := len(response) / 4 // 简化的Token估算
 				usage := s.modelService.CreateModelUsageFromResponse(
-					userID,
-					aiModel.ID,
-					0, // 消息ID后续设置
+					userId,
+					aiModel.Id,
+					0, // 消息Id后续设置
 					prompt,
 					response,
 					promptTokens,

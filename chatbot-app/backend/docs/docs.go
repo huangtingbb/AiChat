@@ -310,7 +310,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "聊天会话ID",
+                        "description": "聊天会话Id",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -386,13 +386,13 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "聊天会话ID",
+                        "description": "聊天会话Id",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "消息内容与可选模型ID",
+                        "description": "消息内容与可选模型Id",
                         "name": "body",
                         "in": "body",
                         "required": true,

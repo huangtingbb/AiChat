@@ -158,7 +158,7 @@ export const useChatStore = defineStore('chat', {
         this.sending = true
         this.currentModel = modelId // 保存当前使用的模型
         
-        // 创建临时用户消息，使用更精确的ID生成
+        // 创建临时用户消息，使用更精确的Id生成
         const tempUserMessage = {
           id: 'temp_user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
           role: 'user',
@@ -379,7 +379,6 @@ export const useChatStore = defineStore('chat', {
         case 'stream_chunk':
           // 更新AI消息内容
           const botMessageIndex = this.messages.findIndex(msg => msg.id === tempBotMessage.id)
-          console.log('接收到文本块:', `"${eventData.text}"`, '消息索引:', botMessageIndex)
           
           if (botMessageIndex !== -1) {
             // 创建新的消息对象来确保响应式更新
@@ -393,14 +392,18 @@ export const useChatStore = defineStore('chat', {
             // 直接替换消息对象来触发响应式更新
             this.messages[botMessageIndex] = updatedMessage
             
-            // 强制触发响应式更新
-            this.messageUpdateCount++
+            // 减少强制更新频率，避免闪屏 - 每10个字符或每100ms更新一次计数器
+            if (!this._lastUpdateTime || Date.now() - this._lastUpdateTime > 100) {
+              this.messageUpdateCount++
+              this._lastUpdateTime = Date.now()
+            }
             
-            console.log('文本块更新后，消息内容长度:', this.messages[botMessageIndex].content.length)
-            console.log('更新后的消息前100字符:', this.messages[botMessageIndex].content.substring(0, 100))
+            // 减少日志输出频率
+            if (updatedMessage.content.length % 50 === 0) {
+              console.log('文本块更新，消息长度:', updatedMessage.content.length)
+            }
           } else {
             console.error('找不到要更新的AI消息，tempBotMessage.id:', tempBotMessage.id)
-            console.log('当前消息ID列表:', this.messages.map(m => ({ id: m.id, role: m.role })))
           }
           break
 
@@ -413,7 +416,7 @@ export const useChatStore = defineStore('chat', {
           if (finalBotMessageIndex !== -1) {
             // 创建最终消息对象
             const finalMessage = {
-              id: eventData.message_id || tempBotMessage.id, // 如果有新ID就用新ID，否则保持原ID
+              id: eventData.message_id || tempBotMessage.id, // 如果有新Id就用新Id，否则保持原Id
               role: 'assistant',
               content: eventData.full_text,
               model_id: tempBotMessage.model_id,

@@ -191,7 +191,7 @@ paths:
       - application/json
       description: 获取指定聊天会话的所有消息
       parameters:
-      - description: 聊天会话ID
+      - description: 聊天会话Id
         in: path
         name: id
         required: true
@@ -237,12 +237,12 @@ paths:
       - application/json
       description: 在指定聊天会话中发送消息并获取AI回复
       parameters:
-      - description: 聊天会话ID
+      - description: 聊天会话Id
         in: path
         name: id
         required: true
         type: integer
-      - description: 消息内容与可选模型ID
+      - description: 消息内容与可选模型Id
         in: body
         name: body
         required: true

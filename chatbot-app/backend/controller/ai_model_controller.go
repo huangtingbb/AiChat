@@ -65,7 +65,7 @@ func (controller *AIModelController) GetAvailableModelList(c *gin.Context) {
 // @Failure 500 {object} utils.Response "服务器错误"
 // @Router /api/ai/usage [get]
 func (controller *AIModelController) GetModelUsageHandler(c *gin.Context) {
-	// 从JWT中获取用户ID
+	// 从JWT中获取用户Id
 	claims, exists := c.Get("claims")
 	if !exists {
 		utils.Unauthorized(c, "未授权")
@@ -73,7 +73,7 @@ func (controller *AIModelController) GetModelUsageHandler(c *gin.Context) {
 	}
 
 	userClaims := claims.(*utils.Claims)
-	userID := userClaims.UserID
+	userId := userClaims.UserId
 
 	// 获取分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -87,16 +87,16 @@ func (controller *AIModelController) GetModelUsageHandler(c *gin.Context) {
 	}
 
 	utils.LogInfo("获取模型使用记录请求", map[string]interface{}{
-		"user_id": userID,
+		"user_id": userId,
 		"page":    page,
 		"limit":   limit,
 	})
 
 	// 获取用户的模型使用记录
-	usageList, err := controller.aiModelService.GetModelUsageByUser(userID)
+	usageList, err := controller.aiModelService.GetModelUsageByUser(userId)
 	if err != nil {
 		utils.LogError("获取模型使用记录失败", err, map[string]interface{}{
-			"user_id": userID,
+			"user_id": userId,
 		})
 		utils.Error(c, "获取使用记录失败: "+err.Error())
 		return

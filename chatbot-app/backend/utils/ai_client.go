@@ -102,7 +102,7 @@ type ChatRequest struct {
 
 // ChatResponse 聊天响应结构
 type ChatResponse struct {
-	ID      string `json:"id"`
+	Id      string `json:"id"`
 	Created int64  `json:"created"`
 	Choices []struct {
 		Message      Message `json:"message"`
@@ -117,7 +117,7 @@ type ChatResponse struct {
 
 // StreamResponse 流式响应结构
 type StreamResponse struct {
-	ID      string `json:"id"`
+	Id      string `json:"id"`
 	Created int64  `json:"created"`
 	Choices []struct {
 		Delta struct {
@@ -266,6 +266,17 @@ func (c *ZhipuClient) parseStreamResponse(body io.Reader, callback func(chunk st
 			if len(streamResp.Choices) > 0 {
 				content := streamResp.Choices[0].Delta.Content
 				if content != "" {
+					// 添加延迟控制输出速度，让用户能看清楚内容
+					// 根据内容长度调整延迟时间，避免过快的输出
+					delay := time.Duration(len(content)*50) * time.Millisecond
+					if delay > 300*time.Millisecond {
+						delay = 300 * time.Millisecond // 最大延迟300ms
+					}
+					if delay < 50*time.Millisecond {
+						delay = 50 * time.Millisecond // 最小延迟50ms
+					}
+					time.Sleep(50 * time.Millisecond)
+
 					// 如果回调函数返回false，停止处理
 					if !callback(content, false, nil) {
 						break

@@ -43,7 +43,7 @@ func NewChatController() *ChatController {
 // @Router /api/chat [post]
 func (controller *ChatController) CreateChat(c *gin.Context) {
 	var req struct {
-		Title string `json:"title" binding:"required"`
+		Title string `json:"title" binding:"required" validate:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -55,7 +55,17 @@ func (controller *ChatController) CreateChat(c *gin.Context) {
 		return
 	}
 
-	// 从JWT中获取用户ID
+	// 使用自定义验证器进行验证
+	if validationError := utils.GetValidationError(req); validationError != "" {
+		utils.LogWarn("创建聊天会话参数验证失败", map[string]interface{}{
+			"error": validationError,
+			"ip":    c.ClientIP(),
+		})
+		utils.InvalidParams(c, validationError)
+		return
+	}
+
+	// 从JWT中获取用户Id
 	claims, exists := c.Get("claims")
 	if !exists {
 		utils.Unauthorized(c, "未授权")
@@ -63,18 +73,18 @@ func (controller *ChatController) CreateChat(c *gin.Context) {
 	}
 
 	userClaims := claims.(*utils.Claims)
-	userID := userClaims.UserID
+	userId := userClaims.UserId
 
 	utils.LogInfo("创建聊天会话请求", map[string]interface{}{
-		"user_id": userID,
+		"user_id": userId,
 		"title":   req.Title,
 		"ip":      c.ClientIP(),
 	})
 
-	chat, err := controller.chatService.CreateChat(userID, req.Title)
+	chat, err := controller.chatService.CreateChat(userId, req.Title)
 	if err != nil {
 		utils.LogError("创建聊天会话失败", err, map[string]interface{}{
-			"user_id": userID,
+			"user_id": userId,
 			"title":   req.Title,
 		})
 		utils.Error(c, err.Error())
@@ -82,8 +92,8 @@ func (controller *ChatController) CreateChat(c *gin.Context) {
 	}
 
 	utils.LogInfo("聊天会话创建成功", map[string]interface{}{
-		"user_id": userID,
-		"chat_id": chat.ID,
+		"user_id": userId,
+		"chat_id": chat.Id,
 		"title":   chat.Title,
 	})
 
@@ -102,7 +112,7 @@ func (controller *ChatController) CreateChat(c *gin.Context) {
 // @Failure 500 {object} utils.Response "服务器错误"
 // @Router /api/chat [get]
 func (controller *ChatController) GetUserChatList(c *gin.Context) {
-	// 从JWT中获取用户ID
+	// 从JWT中获取用户Id
 	claims, exists := c.Get("claims")
 	if !exists {
 		utils.Unauthorized(c, "未授权")
@@ -110,12 +120,12 @@ func (controller *ChatController) GetUserChatList(c *gin.Context) {
 	}
 
 	userClaims := claims.(*utils.Claims)
-	userID := userClaims.UserID
+	userId := userClaims.UserId
 
-	chats, err := controller.chatService.GetUserChatList(userID)
+	chats, err := controller.chatService.GetUserChatList(userId)
 	if err != nil {
 		utils.LogError("获取用户聊天列表失败", err, map[string]interface{}{
-			"user_id": userID,
+			"user_id": userId,
 		})
 		utils.Error(c, err.Error())
 		return
@@ -131,7 +141,7 @@ func (controller *ChatController) GetUserChatList(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param id path integer true "聊天会话ID"
+// @Param id path integer true "聊天会话Id"
 // @Success 200 {object} utils.Response{data=object{messages=array}} "消息列表"
 // @Failure 400 {object} utils.Response "参数错误"
 // @Failure 401 {object} utils.Response "未授权"
@@ -139,39 +149,39 @@ func (controller *ChatController) GetUserChatList(c *gin.Context) {
 // @Failure 500 {object} utils.Response "服务器错误"
 // @Router /api/chat/{id}/message [get]
 func (controller *ChatController) GetChatMessageList(c *gin.Context) {
-	chatIDStr := c.Param("id")
-	chatID, err := strconv.ParseUint(chatIDStr, 10, 64)
+	chatIdStr := c.Param("id")
+	chatId, err := strconv.ParseUint(chatIdStr, 10, 64)
 	if err != nil {
-		utils.LogWarn("获取聊天消息：无效的聊天ID", map[string]interface{}{
-			"chat_id": chatIDStr,
+		utils.LogWarn("获取聊天消息：无效的聊天Id", map[string]interface{}{
+			"chat_id": chatIdStr,
 			"error":   err.Error(),
 		})
-		utils.InvalidParams(c, "无效的聊天ID")
+		utils.InvalidParams(c, "无效的聊天Id")
 		return
 	}
 
-	// 从JWT中获取用户ID
+	// 从JWT中获取用户Id
 	claims, _ := c.Get("claims")
 	userClaims := claims.(*utils.Claims)
-	userID := userClaims.UserID
+	userId := userClaims.UserId
 
 	// 验证聊天会话是否属于当前用户
-	_, err = controller.chatService.GetChatByID(uint(chatID), userID)
+	_, err = controller.chatService.GetChatById(uint(chatId), userId)
 	if err != nil {
 		utils.LogWarn("获取聊天消息：无权访问", map[string]interface{}{
-			"user_id": userID,
-			"chat_id": chatID,
+			"user_id": userId,
+			"chat_id": chatId,
 			"error":   err.Error(),
 		})
 		utils.NotFound(c, err.Error())
 		return
 	}
 
-	messages, err := controller.chatService.GetChatMessages(uint(chatID))
+	messages, err := controller.chatService.GetChatMessages(uint(chatId))
 	if err != nil {
 		utils.LogError("获取聊天消息失败", err, map[string]interface{}{
-			"chat_id": chatID,
-			"user_id": userID,
+			"chat_id": chatId,
+			"user_id": userId,
 		})
 		utils.Error(c, err.Error())
 		return
@@ -187,8 +197,8 @@ func (controller *ChatController) GetChatMessageList(c *gin.Context) {
 // @Accept json
 // @Produce text/event-stream
 // @Security Bearer
-// @Param id path integer true "聊天会话ID"
-// @Param body body object{content=string,model_id=integer} true "消息内容与可选模型ID"
+// @Param id path integer true "聊天会话Id"
+// @Param body body object{content=string,model_id=integer} true "消息内容与可选模型Id"
 // @Success 200 {string} string "Server-Sent Events流式响应"
 // @Failure 400 {object} utils.Response "参数错误"
 // @Failure 401 {object} utils.Response "未授权"
@@ -196,71 +206,66 @@ func (controller *ChatController) GetChatMessageList(c *gin.Context) {
 // @Failure 500 {object} utils.Response "服务器错误"
 // @Router /api/chat/{id}/message [post]
 func (controller *ChatController) SendMessage(c *gin.Context) {
-	chatIDStr := c.Param("id")
-	chatID, err := strconv.ParseUint(chatIDStr, 10, 64)
+	chatIdStr := c.Param("id")
+	chatId, err := strconv.ParseUint(chatIdStr, 10, 64)
 	if err != nil {
-		utils.LogWarn("发送消息：无效的聊天ID", map[string]interface{}{
-			"chat_id": chatIDStr,
-			"error":   err.Error(),
-		})
-		utils.InvalidParams(c, "无效的聊天ID")
+		utils.InvalidParams(c, "无效的聊天Id")
 		return
 	}
 
 	var req struct {
-		Content string `json:"content" binding:"required"`
-		ModelID uint   `json:"model_id"` // 模型ID
+		Content string `json:"content" binding:"required" validate:"required"`
+		ModelId uint   `json:"model_id" binding:"required" validate:"required"` // 模型Id
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.LogWarn("发送消息参数验证失败", map[string]interface{}{
-			"error": err.Error(),
-			"ip":    c.ClientIP(),
-		})
 		utils.InvalidParams(c, err.Error())
 		return
 	}
 
-	// 从JWT中获取用户ID
-	userID := c.GetUint("userID")
+	// 使用自定义验证器进行验证
+	if validationError := utils.GetValidationError(req); validationError != "" {
+		utils.LogWarn("发送消息参数验证失败", map[string]interface{}{
+			"error": validationError,
+			"ip":    c.ClientIP(),
+		})
+		utils.InvalidParams(c, validationError)
+		return
+	}
+
+	selectedModel, err := controller.aiModelService.GetModelById(req.ModelId)
+
+	if err != nil {
+		utils.Error(c, "模型不存在，请重新选择")
+	}
+
+	// 从JWT中获取用户Id
+	userId := c.GetUint("userId")
 
 	utils.LogInfo("发送消息请求", map[string]interface{}{
-		"user_id":  userID,
-		"chat_id":  chatID,
-		"model_id": req.ModelID,
+		"user_id":  userId,
+		"chat_id":  chatId,
+		"model_id": selectedModel.Id,
 		//"content":  req.Content[:min(len(req.Content), 100)], // 只记录前100个字符
 	})
 
 	// 验证聊天会话是否属于当前用户
-	_, err = controller.chatService.GetChatByID(uint(chatID), userID)
+	chat, err := controller.chatService.GetChatById(uint(chatId), userId)
 	if err != nil {
-		utils.LogWarn("发送消息：无权访问聊天会话", map[string]interface{}{
-			"user_id": userID,
-			"chat_id": chatID,
-			"error":   err.Error(),
-		})
 		utils.NotFound(c, err.Error())
 		return
 	}
 
 	// 保存用户消息
-	userMessage, err := controller.chatService.AddMessage(uint(chatID), "user", req.Content)
+	userMessage, err := controller.chatService.AddMessage(chat, "user", req.Content)
 	if err != nil {
-		utils.LogError("保存用户消息失败", err, map[string]interface{}{
-			"user_id": userID,
-			"chat_id": chatID,
-		})
 		utils.Error(c, err.Error())
 		return
 	}
 
 	// 获取历史消息作为上下文
-	messages, err := controller.chatService.GetChatMessages(uint(chatID))
+	messages, err := controller.chatService.GetChatMessages(uint(chatId))
 	if err != nil {
-		utils.LogError("获取聊天历史失败", err, map[string]interface{}{
-			"user_id": userID,
-			"chat_id": chatID,
-		})
 		utils.Error(c, "获取聊天历史失败")
 		return
 	}
@@ -268,34 +273,13 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 	// 将消息转换为适合AI服务的格式
 	var history []map[string]string
 	for _, msg := range messages {
-		if msg.ID == userMessage.ID {
+		if msg.Id == userMessage.Id {
 			continue // 跳过刚刚添加的用户消息
 		}
 		history = append(history, map[string]string{
 			"role":    msg.Role,
 			"content": msg.Content,
 		})
-	}
-
-	// 如果请求中指定了模型ID，临时切换模型
-	var selectedModel *models.AIModel
-	if req.ModelID > 0 {
-		selectedModel, err = controller.aiModelService.GetModelByID(req.ModelID)
-		if err == nil {
-			utils.LogInfo("临时切换AI模型", map[string]interface{}{
-				"user_id":    userID,
-				"model_id":   req.ModelID,
-				"model_name": selectedModel.Name,
-			})
-		} else {
-			utils.LogWarn("指定的模型不存在，使用默认模型", map[string]interface{}{
-				"model_id": req.ModelID,
-				"error":    err.Error(),
-			})
-		}
-	} else {
-		// 获取默认模型
-		selectedModel, _ = controller.aiModelService.GetDefaultModel()
 	}
 
 	// 设置流式响应头
@@ -315,13 +299,8 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 
 	// 发送流式开始信号
 	startData, _ := json.Marshal(gin.H{
-		"type": "stream_start",
-		"model": func() string {
-			if selectedModel != nil {
-				return selectedModel.DisplayName
-			}
-			return "未知模型"
-		}(),
+		"type":  "stream_start",
+		"model": selectedModel.DisplayName,
 	})
 	c.SSEvent("message", string(startData))
 	c.Writer.Flush()
@@ -334,8 +313,8 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 	streamCallback := func(chunk string, isEnd bool, err error) bool {
 		if err != nil {
 			utils.LogError("AI流式回复失败", err, map[string]interface{}{
-				"user_id": userID,
-				"chat_id": chatID,
+				"user_id": userId,
+				"chat_id": chatId,
 			})
 
 			// 发送错误消息
@@ -354,16 +333,16 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 
 			// 保存AI回复到数据库
 			savedBotMessage, saveErr := controller.chatService.AddMessageWithModelMetadata(
-				uint(chatID),
+				uint(chatId),
 				"assistant",
 				response,
-				selectedModel.ID,
+				selectedModel.Id,
 				"", // 元数据稍后更新
 			)
 			if saveErr != nil {
 				utils.LogError("保存AI回复失败", saveErr, map[string]interface{}{
-					"user_id": userID,
-					"chat_id": chatID,
+					"user_id": userId,
+					"chat_id": chatId,
 				})
 
 				// 发送保存错误消息
@@ -381,7 +360,7 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 			// 发送流式结束信号
 			endData, _ := json.Marshal(gin.H{
 				"type":       "stream_end",
-				"message_id": botMessage.ID,
+				"message_id": botMessage.Id,
 				"full_text":  response,
 			})
 			c.SSEvent("message", string(endData))
@@ -404,8 +383,8 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 		select {
 		case <-c.Request.Context().Done():
 			utils.LogInfo("客户端断开连接，停止流式传输", map[string]interface{}{
-				"user_id": userID,
-				"chat_id": chatID,
+				"user_id": userId,
+				"chat_id": chatId,
 			})
 			return false
 		default:
@@ -414,17 +393,17 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 	}
 
 	// 调用AI服务生成流式回复
-	err = controller.aiService.GenerateStreamResponse(selectedModel, req.Content, history, userID, streamCallback)
+	err = controller.aiService.GenerateStreamResponse(selectedModel, req.Content, history, userId, streamCallback)
 	if err != nil {
 		utils.LogError("启动AI流式回复失败", err, map[string]interface{}{
-			"user_id": userID,
-			"chat_id": chatID,
+			"user_id": userId,
+			"chat_id": chatId,
 		})
 
 		// 发送启动错误消息
 		errorData, _ := json.Marshal(gin.H{
 			"type":  "error",
-			"error": "启动AI回复失败: " + err.Error(),
+			"error": "AI回复失败: " + err.Error(),
 		})
 		c.SSEvent("message", string(errorData))
 		c.Writer.Flush()
@@ -432,20 +411,13 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 	}
 
 	// 记录完成日志
-	var modelName string
-	if selectedModel != nil {
-		modelName = selectedModel.DisplayName
-	} else {
-		modelName = "未知模型"
-	}
-
 	utils.LogInfo("AI流式对话完成", map[string]interface{}{
-		"user_id": userID,
-		"chat_id": chatID,
-		"model":   modelName,
+		"user_id": userId,
+		"chat_id": chatId,
+		"model":   selectedModel.DisplayName,
 		"message_id": func() uint {
 			if botMessage != nil {
-				return botMessage.ID
+				return botMessage.Id
 			}
 			return 0
 		}(),

@@ -49,11 +49,11 @@ func RequestLogger() gin.HandlerFunc {
 		// 计算处理时间
 		latency := time.Since(startTime)
 
-		// 获取用户ID（如果存在）
-		userID := ""
+		// 获取用户Id（如果存在）
+		userId := ""
 		if claims, exists := c.Get("claims"); exists {
 			if userClaims, ok := claims.(*utils.Claims); ok {
-				userID = fmt.Sprintf("%d", userClaims.UserID)
+				userId = fmt.Sprintf("%d", userClaims.UserId)
 			}
 		}
 
@@ -65,7 +65,7 @@ func RequestLogger() gin.HandlerFunc {
 			"latency":    latency.String(),
 			"client_ip":  c.ClientIP(),
 			"user_agent": c.Request.UserAgent(),
-			"user_id":    userID,
+			"user_id":    userId,
 		}
 
 		// 添加查询参数（如果存在）

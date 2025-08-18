@@ -43,7 +43,7 @@ func Auth() gin.HandlerFunc {
 
 		// 将claims保存到上下文
 		c.Set("claims", claims)
-		c.Set("userID", claims.UserID)
+		c.Set("userId", claims.UserId)
 		c.Next()
 	}
 }

@@ -60,8 +60,8 @@ func (s *UserService) Login(username, password string) (*models.User, error) {
 	return &user, nil
 }
 
-// GetUserByID 根据ID获取用户
-func (s *UserService) GetUserByID(id uint) (*models.User, error) {
+// GetUserById 根据Id获取用户
+func (s *UserService) GetUserById(id uint) (*models.User, error) {
 	var user models.User
 	result := database.DB.First(&user, id)
 	if result.Error != nil {

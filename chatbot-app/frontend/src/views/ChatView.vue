@@ -115,7 +115,7 @@
       
       <template v-else>
         <!-- 聊天消息区域 -->
-        <div class="chat-messages" ref="messagesContainer">
+        <div class="chat-messages" ref="messagesContainer" @scroll="detectUserScroll">
           <div v-if="messagesForRender.length === 0" class="empty-messages">
             <div class="empty-messages-icon">
               <el-icon><Message /></el-icon>
@@ -163,6 +163,13 @@
               {{ userStore.username.charAt(0).toUpperCase() }}
             </div>
           </div>
+        </div>
+        
+        <!-- 滚动到底部按钮 -->
+        <div v-if="isUserScrolling && !messagesForRender.some(msg => msg.isStreaming)" class="scroll-to-bottom-button" @click="forceScrollToBottom(true)">
+          <el-button type="primary" circle size="small">
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
         </div>
       </template>
         
@@ -265,13 +272,21 @@ const isEditingTitle = ref(false)
 const editingTitle = ref('')
 const titleInput = ref(null)
 
-// 计算属性：强制追踪消息变化（需要在所有使用它的地方之前定义）
+// 计算属性：优化消息渲染key生成，避免闪烁
 const messagesForRender = computed(() => {
-  // 通过计算属性确保响应式更新
-  return chatStore.messages.map((msg, index) => ({
-    ...msg,
-    _renderKey: `${msg.id}_${msg.content?.length || 0}_${chatStore.messageUpdateCount}_${index}`
-  }))
+  // 只为内容真正变化的消息生成新的渲染key
+  return chatStore.messages.map((msg, index) => {
+    // 为每个消息生成稳定的标识符
+    // 只有在消息内容确实发生变化时才改变key
+    const contentHash = msg.content ? msg.content.length : 0
+    const statusFlag = msg.isStreaming ? 'streaming' : 'complete'
+    
+    return {
+      ...msg,
+      // 使用更稳定的key生成策略，避免不必要的重新渲染
+      _renderKey: `${msg.id}_${contentHash}_${statusFlag}`
+    }
+  })
 })
 
 // 模型相关
@@ -356,18 +371,113 @@ const formatTime = (timestamp) => {
   return date.toLocaleString()
 }
 
-// 滚动到底部
-const scrollToBottom = async () => {
-  await nextTick()
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+// 滚动到底部 - 优化滚动逻辑和用户体验
+let scrollTimer = null
+let isUserScrolling = false
+let userScrollTimer = null
+let isProgrammaticScroll = false // 标识是否为程序触发的滚动
+
+// 检测用户是否主动滚动
+const detectUserScroll = () => {
+  // 如果是程序触发的滚动，忽略
+  if (isProgrammaticScroll) {
+    return
   }
+  
+  // 检查是否有流式消息正在输出
+  const hasStreamingMessages = messagesForRender.value.some(msg => msg.isStreaming)
+  
+  // 如果有流式消息在输出，减少用户滚动检测的敏感度
+  if (hasStreamingMessages) {
+    console.log('检测到流式消息输出中，降低滚动检测敏感度')
+    // 流式输出时，只有用户明显向上滚动才认为是手动滚动
+    const container = messagesContainer.value
+    if (container) {
+      const currentScroll = container.scrollTop
+      const maxScroll = container.scrollHeight - container.clientHeight
+      // 只有滚动到远离底部的位置才认为是用户手动滚动
+      if (currentScroll < maxScroll - 200) {
+        console.log('用户明显向上滚动，暂停自动滚动')
+        isUserScrolling = true
+        if (userScrollTimer) {
+          clearTimeout(userScrollTimer)
+        }
+        // 流式输出时缩短恢复时间
+        userScrollTimer = setTimeout(() => {
+          isUserScrolling = false
+          console.log('恢复自动滚动')
+        }, 1000)
+      }
+    }
+  } else {
+    // 没有流式消息时使用正常的检测逻辑
+    isUserScrolling = true
+    if (userScrollTimer) {
+      clearTimeout(userScrollTimer)
+    }
+    // 2秒后重新启用自动滚动
+    userScrollTimer = setTimeout(() => {
+      isUserScrolling = false
+    }, 2000)
+  }
+}
+
+const scrollToBottom = async (forceScroll = false) => {
+  // 如果用户正在手动滚动且不是强制滚动，则不自动滚动
+  if (isUserScrolling && !forceScroll) {
+    console.log('用户正在滚动，跳过自动滚动')
+    return
+  }
+  
+  // 清除之前的定时器，避免频繁滚动
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+  }
+  
+  scrollTimer = setTimeout(async () => {
+    await nextTick()
+    if (messagesContainer.value) {
+      const container = messagesContainer.value
+      const currentScroll = container.scrollTop
+      const maxScroll = container.scrollHeight - container.clientHeight
+      const isNearBottom = currentScroll >= maxScroll - 100
+      
+      console.log('滚动信息:', {
+        currentScroll,
+        maxScroll,
+        isNearBottom,
+        forceScroll,
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight
+      })
+      
+      // 只有在接近底部时才自动滚动，避免打断用户阅读
+      if (isNearBottom || forceScroll) {
+        // 标记为程序触发的滚动
+        isProgrammaticScroll = true
+        
+        console.log('执行滚动到底部')
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: forceScroll ? 'auto' : 'smooth'
+        })
+        
+        // 滚动完成后重置标记
+        setTimeout(() => {
+          isProgrammaticScroll = false
+        }, 500) // 增加延时，确保滚动动画完成
+      } else {
+        console.log('不满足滚动条件，跳过滚动')
+      }
+    }
+  }, 50) // 50ms的节流延迟
 }
 
 // 选择聊天
 const selectChat = async (chatId) => {
   await chatStore.selectChat(chatId)
-  scrollToBottom()
+  await nextTick() // 确保DOM更新
+  forceScrollToBottom() // 选择聊天后强制滚动到底部
 }
 
 // 创建新聊天
@@ -402,6 +512,44 @@ const saveTitle = async () => {
   }
 }
 
+// 强制滚动函数 - 支持流式输出时的实时滚动
+const forceScrollToBottom = (useSmooth = false) => {
+  if (messagesContainer.value) {
+    const container = messagesContainer.value
+    
+    // 检查是否需要滚动
+    const currentScroll = container.scrollTop
+    const maxScroll = container.scrollHeight - container.clientHeight
+    const shouldScroll = currentScroll < maxScroll - 50 // 给一些缓冲空间
+    
+    if (shouldScroll) {
+      console.log('强制滚动前:', {
+        scrollTop: container.scrollTop,
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight,
+        maxScroll,
+        shouldScroll
+      })
+      
+      if (useSmooth) {
+        // 使用smooth滚动
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth'
+        })
+      } else {
+        // 直接设置scrollTop，适用于流式输出
+        container.scrollTop = container.scrollHeight
+      }
+      
+      console.log('强制滚动后:', {
+        scrollTop: container.scrollTop,
+        scrollHeight: container.scrollHeight
+      })
+    }
+  }
+}
+
 // 发送消息
 const sendMessage = async () => {
   if (!messageInput.value.trim() || chatStore.sending) return
@@ -422,14 +570,17 @@ const sendMessage = async () => {
     createTempChat()
   }
   
-  // 将选中的模型ID传递给store
+  // 将选中的模型Id传递给store
   const modelId = selectedModel.value ? selectedModel.value.id : null
-  console.log('调用sendUserMessage，模型ID:', modelId)
+  console.log('调用sendUserMessage，模型Id:', modelId)
   
   try {
     await chatStore.sendUserMessage(content, modelId)
     console.log('sendUserMessage完成，消息数量:', messagesForRender.value.length)
-    scrollToBottom()
+    
+    // 使用nextTick确保DOM更新后再滚动
+    await nextTick()
+    forceScrollToBottom() // 使用简单滚动函数测试
   } catch (error) {
     console.error('发送消息失败:', error)
   }
@@ -446,74 +597,82 @@ const logout = () => {
   }).catch(() => {})
 }
 
-// 监听消息变化，自动滚动到底部
+// 合并监听器，减少重复触发 - 优化性能
+let scrollDebounceTimer = null
+const debouncedScrollToBottom = (forceScroll = false) => {
+  if (scrollDebounceTimer) {
+    clearTimeout(scrollDebounceTimer)
+  }
+  scrollDebounceTimer = setTimeout(() => {
+    // 暂时使用简单滚动函数进行测试
+    if (forceScroll) {
+      forceScrollToBottom()
+    } else {
+      scrollToBottom(forceScroll)
+    }
+  }, 100) // 100ms防抖
+}
+
+// 监听消息数量变化
 watch(() => messagesForRender.value.length, (newLength, oldLength) => {
-  console.log('消息数量变化:', oldLength, '->', newLength)
-  console.log('当前消息列表:', messagesForRender.value)
-  nextTick(() => {
-    scrollToBottom()
-  })
+  if (newLength > oldLength) {
+    console.log('消息数量增加:', oldLength, '->', newLength)
+    debouncedScrollToBottom(true) // 新消息时强制滚动
+  }
 }, { flush: 'post' })
 
-// 监听消息内容变化（用于流式更新时滚动）
-watch(() => messagesForRender.value.map(m => m.content).join(''), 
-  (newContent, oldContent) => {
-    console.log('消息内容变化，长度:', oldContent?.length, '->', newContent?.length)
-    // 只有在有流式消息时才滚动
-    const hasStreamingMessage = messagesForRender.value.some(m => m.isStreaming)
-    if (hasStreamingMessage) {
-      nextTick(() => {
-        scrollToBottom()
-      })
-    }
-  },
-  { flush: 'post' }
-)
-
-// 添加深度监听消息数组的变化
-watch(() => messagesForRender.value, (newMessages) => {
-  console.log('消息数组深度监听变化:', newMessages.length, '条消息')
-  console.log('消息详情:', newMessages.map(m => ({
-    id: m.id,
-    role: m.role,
-    contentLength: m.content?.length || 0,
-    isStreaming: m.isStreaming
-  })))
-  // 强制触发滚动
-  nextTick(() => {
-    scrollToBottom()
-  })
-}, { deep: true, flush: 'post' })
-
-// 监听消息更新计数器强制刷新
-watch(() => chatStore.messageUpdateCount, (newCount, oldCount) => {
-  console.log('消息更新计数器变化:', oldCount, '->', newCount, '当前消息数量:', chatStore.messages.length)
-  // 延迟执行确保DOM已更新
-  nextTick(() => {
-    scrollToBottom()
-  })
+// 专门监听流式消息的内容长度变化，确保实时滚动
+watch(() => {
+  // 获取所有流式消息的总长度
+  const streamingMessages = messagesForRender.value.filter(msg => msg.isStreaming)
+  return streamingMessages.reduce((total, msg) => total + (msg.content?.length || 0), 0)
+}, (newTotalLength, oldTotalLength) => {
+  // 只要流式消息内容增加就立即滚动
+  if (newTotalLength > oldTotalLength && newTotalLength > 0) {
+    console.log('流式内容长度变化:', oldTotalLength, '->', newTotalLength)
+    // 立即滚动，不使用防抖，确保跟随性
+    forceScrollToBottom()
+  }
 }, { flush: 'post' })
 
-// 监听流式消息的内容长度变化，确保实时滚动
-watch(() => messagesForRender.value.filter(m => m.isStreaming).map(m => m.content?.length || 0),
-  (newLengths, oldLengths) => {
-    if (newLengths.some((len, index) => len !== (oldLengths?.[index] || 0))) {
-      console.log('流式消息内容长度变化:', oldLengths, '->', newLengths)
-      nextTick(() => {
-        scrollToBottom()
-      })
-    }
-  },
-  { deep: true, flush: 'post' }
-)
-
-// 专门监听store中messages数组的变化
-watch(() => chatStore.messages, (newMessages) => {
-  console.log('Store messages直接监听变化:', newMessages.length, '条消息')
-  nextTick(() => {
-    scrollToBottom()
+// 监听流式消息内容变化（确保实时滚动）
+let lastStreamingInfo = { count: 0, totalLength: 0 }
+watch(() => {
+  const streamingMessages = messagesForRender.value.filter(m => m.isStreaming)
+  return {
+    count: streamingMessages.length,
+    totalLength: streamingMessages.reduce((total, msg) => total + (msg.content?.length || 0), 0),
+    // 只关注正在流式响应的消息，避免影响其他消息
+    streamingIds: streamingMessages.map(m => m.id)
+  }
+}, (newInfo) => {
+  console.log('流式消息变化:', {
+    oldLength: lastStreamingInfo.totalLength,
+    newLength: newInfo.totalLength,
+    oldCount: lastStreamingInfo.count,
+    newCount: newInfo.count
   })
-}, { deep: true, flush: 'post' })
+  
+  // 只有在流式消息确实增加内容时才滚动
+  if (newInfo.totalLength > lastStreamingInfo.totalLength || 
+      newInfo.count > lastStreamingInfo.count) {
+    lastStreamingInfo = newInfo
+    console.log('流式消息内容增加，触发滚动')
+    
+    // 流式输出时使用强制滚动，确保跟随内容
+    setTimeout(() => {
+      forceScrollToBottom()
+    }, 50)
+  }
+}, { flush: 'post' })
+
+// 监听消息更新计数器（减少日志输出）
+// 注释掉这个监听器，因为我们已经不再依赖messageUpdateCount来触发重新渲染
+// watch(() => chatStore.messageUpdateCount, (newCount, oldCount) => {
+//   if (newCount % 5 === 0) {
+//     console.log('消息更新计数器:', newCount, '消息数量:', chatStore.messages.length)
+//   }
+// }, { flush: 'post' })
 
 // 组件挂载时获取聊天列表和可用模型
 onMounted(async () => {
@@ -922,6 +1081,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   scroll-behavior: smooth;
+  /* 优化渲染性能，减少闪屏 */
+  will-change: scroll-position;
+  transform: translateZ(0); /* 开启硬件加速 */
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -962,6 +1124,9 @@ onMounted(async () => {
   margin-bottom: 24px;
   position: relative;
   width: 100%;
+  /* 优化渲染性能，避免闪烁 */
+  will-change: auto;
+  contain: layout style;
 }
 
 .avatar {
@@ -1027,6 +1192,9 @@ onMounted(async () => {
   font-size: 15px;
   line-height: 1.6;
   word-break: break-word;
+  /* 优化文本渲染，减少重排重绘 */
+  will-change: auto;
+  contain: layout style;
 }
 
 /* 支持代码高亮和markdown样式 */
@@ -1132,14 +1300,18 @@ onMounted(async () => {
   font-style: italic;
 }
 
-/* 流式响应样式 */
+/* 流式响应样式 - 优化动画性能 */
 .message.streaming {
   position: relative;
   overflow: visible;
+  /* 优化动画性能 */
+  will-change: box-shadow;
+  transform: translateZ(0);
 }
 
 .message.streaming.assistant {
-  animation: streamingGlow 2s infinite alternate;
+  /* 使用更温和的动画，减少闪屏 */
+  animation: streamingGlow 3s ease-in-out infinite alternate;
 }
 
 @keyframes streamingGlow {
@@ -1147,7 +1319,7 @@ onMounted(async () => {
     box-shadow: var(--glow-effect);
   }
   100% { 
-    box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
   }
 }
 
@@ -1169,8 +1341,11 @@ onMounted(async () => {
   height: 6px;
   border-radius: 50%;
   background-color: var(--accent-color);
-  animation: typing 1.4s infinite ease-in-out;
+  animation: typing 1.6s infinite ease-in-out;
   opacity: 0.4;
+  /* 优化动画性能 */
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 .typing-dots span:nth-child(1) {
@@ -1178,22 +1353,43 @@ onMounted(async () => {
 }
 
 .typing-dots span:nth-child(2) {
-  animation-delay: 0.2s;
+  animation-delay: 0.3s;
 }
 
 .typing-dots span:nth-child(3) {
-  animation-delay: 0.4s;
+  animation-delay: 0.6s;
 }
 
 @keyframes typing {
   0%, 80%, 100% {
-    transform: scale(0.8);
+    transform: scale(0.8) translateZ(0);
     opacity: 0.4;
   }
   40% {
-    transform: scale(1.2);
-    opacity: 1;
+    transform: scale(1.1) translateZ(0);
+    opacity: 0.8;
   }
+}
+
+/* 滚动到底部按钮 */
+.scroll-to-bottom-button {
+  position: absolute;
+  bottom: 120px;
+  right: 30px;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.scroll-to-bottom-button .el-button {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: none;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  transition: all 0.3s ease;
+}
+
+.scroll-to-bottom-button .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* 输入区域 */

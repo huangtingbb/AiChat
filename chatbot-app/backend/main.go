@@ -7,6 +7,7 @@ import (
 	"chatbot-app/backend/middleware"
 	"chatbot-app/backend/router"
 	"chatbot-app/backend/utils"
+
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -48,6 +49,13 @@ func main() {
 
 	// 设置Gin模式
 	gin.SetMode(cfg.Server.Mode)
+
+	// 初始化验证器
+	if err := utils.InitValidator(); err != nil {
+		utils.LogError("验证器初始化失败", err)
+		panic(err)
+	}
+	utils.LogInfo("验证器初始化成功")
 
 	// 初始化数据库连接
 	if err := database.InitMySQL(&cfg.Database); err != nil {

@@ -8,7 +8,7 @@ import (
 
 // AIModel AI模型配置
 type AIModel struct {
-	ID               uint           `json:"id" gorm:"primaryKey"`
+	Id               uint           `json:"id" gorm:"primaryKey"`
 	Name             string         `json:"name" gorm:"size:50;not null;uniqueIndex"` // 模型名称，如zhipu-glm-4
 	DisplayName      string         `json:"display_name" gorm:"size:100;not null"`    // 显示名称，如智谱GLM-4
 	Provider         string         `json:"provider" gorm:"size:50;not null"`         // 提供商，如zhipu、openai
@@ -30,10 +30,10 @@ type AIModel struct {
 
 // AIModelUsage AI模型使用记录
 type AIModelUsage struct {
-	ID               uint           `json:"id" gorm:"primaryKey"`
-	UserID           uint           `json:"user_id" gorm:"not null;index"`
-	ModelID          uint           `json:"model_id" gorm:"not null;index"`
-	MessageID        uint           `json:"message_id" gorm:"index"`
+	Id               uint           `json:"id" gorm:"primaryKey"`
+	UserId           uint           `json:"user_id" gorm:"not null;index"`
+	ModelId          uint           `json:"model_id" gorm:"not null;index"`
+	MessageId        uint           `json:"message_id" gorm:"index"`
 	Prompt           string         `json:"prompt" gorm:"type:text"`
 	Response         string         `json:"response" gorm:"type:text"`
 	PromptTokens     int            `json:"prompt_tokens" gorm:"default:0"`

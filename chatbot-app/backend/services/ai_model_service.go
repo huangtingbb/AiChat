@@ -20,8 +20,8 @@ func (s *AIModelService) GetAllModelList() ([]models.AIModel, error) {
 	return aiModelList, nil
 }
 
-// GetModelByID 根据ID获取AI模型
-func (s *AIModelService) GetModelByID(id uint) (*models.AIModel, error) {
+// GetModelById 根据Id获取AI模型
+func (s *AIModelService) GetModelById(id uint) (*models.AIModel, error) {
 	var aiModel models.AIModel
 	if err := database.DB.First(&aiModel, id).Error; err != nil {
 		return nil, errors.New("模型不存在")
@@ -53,9 +53,9 @@ func (s *AIModelService) RecordModelUsage(usage *models.AIModelUsage) error {
 }
 
 // GetModelUsageByUser 获取用户的模型使用记录
-func (s *AIModelService) GetModelUsageByUser(userID uint) ([]models.AIModelUsage, error) {
+func (s *AIModelService) GetModelUsageByUser(userId uint) ([]models.AIModelUsage, error) {
 	var usages []models.AIModelUsage
-	if err := database.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&usages).Error; err != nil {
+	if err := database.DB.Where("user_id = ?", userId).Order("created_at DESC").Find(&usages).Error; err != nil {
 		return nil, err
 	}
 	return usages, nil
@@ -63,9 +63,9 @@ func (s *AIModelService) GetModelUsageByUser(userID uint) ([]models.AIModelUsage
 
 // CreateModelUsageFromResponse 从响应创建使用记录
 func (s *AIModelService) CreateModelUsageFromResponse(
-	userID uint,
-	modelID uint,
-	messageID uint,
+	userId uint,
+	modelId uint,
+	messageId uint,
 	prompt string,
 	response string,
 	promptTokens int,
@@ -73,9 +73,9 @@ func (s *AIModelService) CreateModelUsageFromResponse(
 	duration int,
 ) *models.AIModelUsage {
 	return &models.AIModelUsage{
-		UserID:           userID,
-		ModelID:          modelID,
-		MessageID:        messageID,
+		UserId:           userId,
+		ModelId:          modelId,
+		MessageId:        messageId,
 		Prompt:           prompt,
 		Response:         response,
 		PromptTokens:     promptTokens,
@@ -89,14 +89,14 @@ func (s *AIModelService) CreateModelUsageFromResponse(
 
 // CreateModelUsageError 创建错误使用记录
 func (s *AIModelService) CreateModelUsageError(
-	userID uint,
-	modelID uint,
+	userId uint,
+	modelId uint,
 	prompt string,
 	errorMsg string,
 ) *models.AIModelUsage {
 	return &models.AIModelUsage{
-		UserID:    userID,
-		ModelID:   modelID,
+		UserId:    userId,
+		ModelId:   modelId,
 		Prompt:    prompt,
 		Status:    "error",
 		ErrorMsg:  errorMsg,
