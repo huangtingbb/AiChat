@@ -181,7 +181,7 @@
             type="textarea"
             :rows="1"
             :autosize="{ minRows: 1, maxRows: 5 }"
-            :placeholder="'在 go 中发消息'"
+            :placeholder="'请输入您的问题'"
             @keydown.enter.exact.prevent="sendMessage"
             class="message-textarea"
           />
@@ -326,11 +326,14 @@ const fetchAvailableModels = async () => {
         }
       })
       
-      // 只使用接口返回的current_model作为默认选中模型
+              // 只使用接口返回的current_model作为默认选中模型
       if (response.data.current_model) {
-        const currentModel = modelList.value.find(m => m.id === response.data.current_model)
-        if (currentModel) {
-          selectedModel.value = currentModel
+          selectedModel.value = response.data.current_model
+      } else {
+        console.warn('接口未返回current_model')
+        // 如果没有返回current_model，选择第一个可用模型作为默认
+        if (modelList.value.length > 0) {
+          selectedModel.value = modelList.value[0]
         }
       }
     } else {
@@ -1415,8 +1418,13 @@ onMounted(async () => {
   width: 100%;
 }
 
+.message-textarea :deep(.el-textarea) {
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .message-textarea :deep(.el-textarea__inner) {
-  border: none;
+  border: none !important;
   background-color: transparent;
   resize: none;
   padding: 4px 0;
@@ -1424,11 +1432,13 @@ onMounted(async () => {
   line-height: 1.5;
   color: #333;
   min-height: 24px;
+  box-shadow: none !important;
 }
 
 .message-textarea :deep(.el-textarea__inner:focus) {
-  outline: none;
-  box-shadow: none;
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 .message-textarea :deep(.el-textarea__inner::placeholder) {

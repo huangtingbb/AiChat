@@ -49,6 +49,48 @@ chatbot-app/
 
 ## 最新更新 (2025-01-27)
 
+### 🤖 Coze智能体集成完成
+1. **Coze平台支持**
+   - 完整集成Coze智能体平台
+   - 支持Coze Bot对话模式和Workflow工作流模式
+   - 实现JWT OAuth认证和Token缓存机制
+   - 支持流式和非流式两种响应模式
+
+2. **配置管理**
+   - 添加`CozeConfig`配置结构体
+   - 支持YAML配置文件和环境变量两种配置方式
+   - 自动从Redis缓存Token，提高调用效率
+   - 配置文件：`config/coze_config.yaml`
+
+3. **服务架构**
+   - 创建专用的`CozeService`处理智能体调用
+   - 集成到AI工厂模式，支持多AI提供商统一管理
+   - 实现`CozeClientAdapter`适配器，符合现有AI接口标准
+   - 支持对话历史和上下文管理
+
+4. **数据库支持**
+   - 添加Coze模型到数据库迁移文件
+   - 支持Coze Bot和Coze Workflow两种模型类型
+   - 完善的使用记录和性能监控
+
+5. **流式响应**
+   - 支持Coze智能体的流式对话
+   - 支持Coze工作流的流式执行
+   - 实时事件处理和错误管理
+   - 与现有SSE架构完美集成
+
+### 📋 Coze集成完成清单
+- ✅ **配置管理**：支持YAML和环境变量两种配置方式
+- ✅ **JWT认证**：自动获取和缓存Access Token
+- ✅ **Redis缓存**：Token缓存优化，减少API调用
+- ✅ **服务架构**：专用CozeService和适配器模式
+- ✅ **数据库集成**：自动添加Coze模型到数据库
+- ✅ **流式响应**：完整的SSE流式对话支持
+- ✅ **错误处理**：完善的错误处理和重试机制
+- ✅ **使用统计**：Token消耗和性能监控
+- ✅ **测试工具**：提供完整的测试和示例代码
+- ✅ **文档完善**：详细的设置指南和API文档
+
 ### 🎯 自定义中文验证参数功能完成
 1. **中文验证器实现**
    - 创建完整的自定义中文验证系统 `utils/validator.go`
@@ -208,6 +250,15 @@ ZHIPU_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1
 
+# Coze智能体配置
+COZE_API_URL=https://api.coze.cn
+COZE_CLIENT_ID=your_coze_client_id
+COZE_PRIVATE_KEY=your_coze_private_key
+COZE_PRIVATE_KEY_FILE=/path/to/private_key.pem
+COZE_PUBLIC_KEY_ID=your_coze_public_key_id
+COZE_BOT_ID=your_coze_bot_id
+COZE_WORKFLOW_ID=your_coze_workflow_id
+
 # JWT密钥
 JWT_SECRET=your_jwt_secret_key_here
 ```
@@ -217,6 +268,14 @@ JWT_SECRET=your_jwt_secret_key_here
 - `DB_PASSWORD`: 数据库密码
 - `REDIS_PASSWORD`: Redis密码（如果有设置密码）
 - `JWT_SECRET`: JWT签名密钥，建议使用长随机字符串
+
+### Coze智能体配置项
+- `COZE_CLIENT_ID`: Coze应用的Client ID，在[Coze开发者平台](https://www.coze.cn/)获取
+- `COZE_PRIVATE_KEY`: Coze应用的私钥（PEM格式）
+- `COZE_PRIVATE_KEY_FILE`: 私钥文件路径（与COZE_PRIVATE_KEY二选一）
+- `COZE_PUBLIC_KEY_ID`: Coze应用的公钥ID
+- `COZE_BOT_ID`: 要使用的Coze智能体ID
+- `COZE_WORKFLOW_ID`: 要使用的Coze工作流ID（可选，用于工作流模式）
 
 ## 流式AI回复使用指南
 
@@ -316,6 +375,8 @@ func (controller *ChatController) StreamMessage(c *gin.Context) {
 - **GLM-4-Plus**: 智谱AI增强版对话模型
 - **GLM-4-Air**: 智谱AI轻量版模型
 - **GLM-Z1**: 智谱AI最新推理模型（推荐）
+- **Coze智能体**: Coze平台的智能体对话模式
+- **Coze工作流**: Coze平台的工作流模式，适合复杂的多步骤任务
 
 ### 性能优化
 - **连接池**: 使用HTTP连接池复用连接
@@ -328,7 +389,75 @@ func (controller *ChatController) StreamMessage(c *gin.Context) {
 - **动态切换**: 支持运行时动态切换AI模型
 - **API Key管理**: 模型的API Key从环境变量读取，提高安全性
 - **Base URL配置**: 如果模型表中没有配置URL，则使用环境变量中的默认URL
-- **多提供商支持**: 支持智谱AI、OpenAI等多种AI提供商（OpenAI待实现）
+- **多提供商支持**: 支持智谱AI、Coze、OpenAI等多种AI提供商（OpenAI待实现）
+
+### Coze智能体使用示例
+```go
+// 创建Coze服务实例
+cozeService, err := services.NewCozeService()
+if err != nil {
+    log.Fatal("创建Coze服务失败:", err)
+}
+
+// 使用流式对话
+err = cozeService.GenerateStreamResponse(
+    "请帮我分析一下这个问题", 
+    historyMessages, 
+    userID, 
+    func(chunk string, isEnd bool, err error) bool {
+        if err != nil {
+            log.Printf("错误: %v", err)
+            return false
+        }
+        
+        if isEnd {
+            fmt.Println("\n对话完成")
+            return true
+        }
+        
+        fmt.Print(chunk) // 实时输出
+        return true
+    },
+)
+```
+
+### Coze配置文件示例
+创建 `config/coze_config.yaml` 文件：
+```yaml
+coze:
+  api_url: "https://api.coze.cn"
+  client_id: "your_client_id"
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    your_private_key_content_here
+    -----END PRIVATE KEY-----
+  public_key_id: "your_public_key_id"
+  bot_id: "your_bot_id"
+  workflow_id: "your_workflow_id"  # 可选，用于工作流模式
+```
+
+### Coze快速开始
+
+1. **复制配置模板**：
+   ```bash
+   cp config/coze_config.example.yaml config/coze_config.yaml
+   ```
+
+2. **填写配置信息**：
+   - 访问 [Coze开发者平台](https://www.coze.cn/) 获取凭证
+   - 编辑 `config/coze_config.yaml` 填入实际值
+
+3. **测试配置**：
+   ```bash
+   cd chatbot-app/backend
+   go run examples/coze_example.go
+   ```
+
+4. **使用Coze模型**：
+   - 启动项目后，在前端选择"Coze智能体"或"Coze工作流"模型
+   - 开始与Coze智能体对话
+
+详细设置指南请参考：[docs/COZE_SETUP.md](docs/COZE_SETUP.md)
 
 ## 运行说明
 

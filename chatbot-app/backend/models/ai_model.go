@@ -1,9 +1,8 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
+	"time"
 )
 
 // AIModel AI模型配置

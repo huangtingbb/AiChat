@@ -11,6 +11,7 @@ const (
 	ProviderZhipu  = "zhipu"
 	ProviderOpenAI = "openai"
 	// 可以在这里添加更多提供商
+	ProviderCoze = "coze"
 )
 
 // AIClientFactory AI客户端工厂
@@ -38,6 +39,8 @@ func (f *AIClientFactory) CreateClient(model *models.AIModel) (AIClient, error) 
 	case ProviderOpenAI:
 		// TODO: 实现OpenAI客户端
 		return nil, fmt.Errorf("OpenAI客户端暂未实现")
+	case ProviderCoze:
+		return f.createCozeClient(model)
 	default:
 		return nil, fmt.Errorf("不支持的AI提供商: %s", model.Provider)
 	}
@@ -67,6 +70,16 @@ func (f *AIClientFactory) createZhipuClient(model *models.AIModel) (AIClient, er
 	client := NewZhipuClient(apiKey, baseURL, model.Name, options)
 
 	return client, nil
+}
+
+// createCozeClient 创建Coze客户端
+func (f *AIClientFactory) createCozeClient(model *models.AIModel) (AIClient, error) {
+	// 创建Coze适配器，延迟初始化客户端
+	adapter := &CozeClientAdapter{
+		model: model,
+	}
+
+	return adapter, nil
 }
 
 // createOpenAIClient 创建OpenAI客户端（预留）
@@ -109,4 +122,21 @@ func ConvertHistoryMessages(history []map[string]string) []Message {
 		})
 	}
 	return messages
+}
+
+// CozeClientAdapter Coze客户端适配器，实现AIClient接口
+type CozeClientAdapter struct {
+	model *models.AIModel
+}
+
+// GenerateResponse 生成回复
+func (adapter *CozeClientAdapter) GenerateResponse(prompt string, history []Message) (string, error) {
+	return "", fmt.Errorf("Coze非流式对话暂未实现，请使用流式模式")
+}
+
+// GenerateStreamResponse 生成流式回复
+func (adapter *CozeClientAdapter) GenerateStreamResponse(prompt string, history []Message, callback func(chunk string, isEnd bool, err error) bool) error {
+	// 注意：这里需要通过服务层来调用coze功能，避免循环导入
+	// 实际的coze调用应该在services层处理
+	return fmt.Errorf("Coze客户端适配器需要通过服务层调用，请使用CozeService")
 }

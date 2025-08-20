@@ -1,10 +1,9 @@
 package config
 
 import (
+	"github.com/joho/godotenv"
 	"os"
 	"strconv"
-
-	"github.com/joho/godotenv"
 )
 
 // Config 应用程序配置
@@ -22,6 +21,17 @@ type AIConfig struct {
 	ZhipuBaseURL  string
 	OpenAIAPIKey  string
 	OpenAIBaseURL string
+}
+
+// CozeConfig Coze配置
+type CozeConfig struct {
+	APIURL             string
+	ClientID           string
+	PrivateKey         string
+	PrivateKeyFilePath string
+	PublicKeyID        string
+	BotID              string
+	WorkFlowID         string
 }
 
 // ServerConfig 服务器配置
@@ -118,4 +128,18 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 		}
 	}
 	return defaultValue
+}
+
+// GetCozeConfig 获取Coze配置
+func GetCozeConfig() *CozeConfig {
+	//从环境变量读取
+	return &CozeConfig{
+		APIURL:             getEnv("COZE_API_URL", "https://api.coze.cn"),
+		ClientID:           getEnv("COZE_CLIENT_ID", ""),
+		PrivateKey:         getEnv("COZE_PRIVATE_KEY", ""),
+		PrivateKeyFilePath: getEnv("COZE_PRIVATE_KEY_FILE", ""),
+		PublicKeyID:        getEnv("COZE_PUBLIC_KEY_ID", ""),
+		BotID:              getEnv("COZE_BOT_ID", ""),
+		WorkFlowID:         getEnv("COZE_WORKFLOW_ID", ""),
+	}
 }
