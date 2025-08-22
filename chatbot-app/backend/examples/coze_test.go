@@ -74,10 +74,10 @@ func main() {
 			},
 		}
 
-		prompt := "请简单介绍一下你自己"
+		message := "请简单介绍一下你自己"
 		userID := uint(1)
 
-		fmt.Printf("发送消息: %s\n", prompt)
+		fmt.Printf("发送消息: %s\n", message)
 		fmt.Println("AI回复:")
 
 		// 流式回调函数
@@ -98,7 +98,7 @@ func main() {
 		}
 
 		// 调用流式响应
-		err = cozeService.GenerateStreamResponse(prompt, history, userID, streamCallback)
+		err = cozeService.GenerateStreamResponse(message, history, userID, streamCallback)
 		if err != nil {
 			log.Printf("流式响应测试失败: %v", err)
 		}

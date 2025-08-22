@@ -24,10 +24,10 @@ func NewCozeService() (*CozeService, error) {
 }
 
 // GenerateResponse 生成回复（非流式）
-func (s *CozeService) GenerateResponse(prompt string, history []*models.Message) (string, error) {
+func (s *CozeService) GenerateResponse(message string, history []*models.Message) (string, error) {
 	// 如果配置了工作流ID，使用工作流模式
 	if s.client.Config.WorkFlowID != "" {
-		workflowResp, err := s.client.RunWorkflow(prompt)
+		workflowResp, err := s.client.RunWorkflow(message)
 		if err != nil {
 			return "", fmt.Errorf("执行Coze工作流失败: %v", err)
 		}
@@ -46,7 +46,7 @@ func (s *CozeService) GenerateResponse(prompt string, history []*models.Message)
 }
 
 // GenerateStreamResponse 生成流式回复
-func (s *CozeService) GenerateStreamResponse(prompt string, history []*models.Message, userID uint, callback func(chunk string, isEnd bool, err error) bool) error {
+func (s *CozeService) GenerateStreamResponse(message string, history []*models.Message, userID uint, callback func(chunk string, isEnd bool, err error) bool) error {
 	// 创建会话
 	conversationID, err := s.client.CreateConversation()
 	if err != nil {
@@ -55,7 +55,7 @@ func (s *CozeService) GenerateStreamResponse(prompt string, history []*models.Me
 
 	// 如果配置了工作流ID，使用工作流模式
 	if s.client.Config.WorkFlowID != "" {
-		return s.client.RunWorkflowStream(prompt, func(eventType string, data interface{}) {
+		return s.client.RunWorkflowStream(message, func(eventType string, data interface{}) {
 			switch eventType {
 			case "message_delta":
 				if dataMap, ok := data.(map[string]string); ok {
