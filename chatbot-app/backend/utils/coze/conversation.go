@@ -13,7 +13,10 @@ import (
 )
 
 func (conversation *Client) CreateConversation() (string, error) {
-	botID := conversation.Config.BotID
+	botID := conversation.BotID
+	if botID == "" {
+		botID = conversation.Config.BotID
+	}
 	ctx := context.Background()
 	metaData := map[string]string{
 		"user_id":    "157",
@@ -46,8 +49,12 @@ func (conversation *Client) SendMessage(conversationID string, message string) (
 func (conversation *Client) SendMessageStream(conversationID string, message string) (*coze.CreateMessageResp, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
+	botID := conversation.BotID
+	if botID == "" {
+		botID = conversation.Config.BotID
+	}
 	req := &coze.CreateChatsReq{
-		BotID:  conversation.Config.BotID,
+		BotID:  botID,
 		UserID: "157",
 		Messages: []*coze.Message{
 			coze.BuildUserQuestionText(message, nil),
@@ -106,8 +113,12 @@ func (conversation *Client) SendMessageStreamWithCallback(conversationID string,
 			Type:    messageType,
 		})
 	}
+	botID := conversation.BotID
+	if botID == "" {
+		botID = conversation.Config.BotID
+	}
 	req := &coze.CreateChatsReq{
-		BotID:          conversation.Config.BotID,
+		BotID:          botID,
 		ConversationID: conversationID,
 		UserID:         strconv.FormatUint(uint64(userID), 10),
 		Messages:       cozeMessageList,

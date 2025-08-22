@@ -39,7 +39,8 @@ func main() {
 
 	// 测试Coze服务创建
 	fmt.Println("\n=== 测试Coze服务创建 ===")
-	cozeService, err := services.NewCozeService()
+	var aiModel models.AIModel
+	cozeService, err := services.NewCozeService(&aiModel)
 	if err != nil {
 		log.Fatalf("创建Coze服务失败: %v", err)
 	}

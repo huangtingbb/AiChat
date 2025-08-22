@@ -18,8 +18,12 @@ func (workflow *Client) RunWorkflow(message string) (*coze.RunWorkflowsResp, err
 		"token": "user:normal:c9542333dd93486a98c1b8289d2de0c5",
 		"input": message,
 	}
+	workflowID := workflow.WorkflowID
+	if workflowID == "" {
+		workflowID = workflow.Config.WorkFlowID
+	}
 	workflowReq := &coze.RunWorkflowsReq{
-		WorkflowID: workflow.Config.WorkFlowID,
+		WorkflowID: workflowID,
 		Parameters: workflow_param,
 		IsAsync:    false,
 	}
@@ -40,8 +44,12 @@ func (workflow *Client) RunWorkflowStream(message string, onMessage func(eventTy
 		"token": "user:normal:c9542333dd93486a98c1b8289d2de0c5",
 		"input": message,
 	}
+	workflowID := workflow.WorkflowID
+	if workflowID == "" {
+		workflowID = workflow.Config.WorkFlowID
+	}
 	workflowReq := &coze.RunWorkflowsReq{
-		WorkflowID: workflow.Config.WorkFlowID,
+		WorkflowID: workflowID,
 		Parameters: workflow_param,
 		IsAsync:    false,
 	}

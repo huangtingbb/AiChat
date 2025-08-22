@@ -132,11 +132,18 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 
 // GetCozeConfig 获取Coze配置
 func GetCozeConfig() *CozeConfig {
+	//从本地文件读取privatekey
+	privateKeyBytes, err := os.ReadFile(getEnv("COZE_PRIVATE_KEY_FILE", ""))
+	if err != nil {
+		panic(err)
+	}
+	privateKey := string(privateKeyBytes)
+
 	//从环境变量读取
 	return &CozeConfig{
 		APIURL:             getEnv("COZE_API_URL", "https://api.coze.cn"),
 		ClientID:           getEnv("COZE_CLIENT_ID", ""),
-		PrivateKey:         getEnv("COZE_PRIVATE_KEY", ""),
+		PrivateKey:         privateKey,
 		PrivateKeyFilePath: getEnv("COZE_PRIVATE_KEY_FILE", ""),
 		PublicKeyID:        getEnv("COZE_PUBLIC_KEY_ID", ""),
 		BotID:              getEnv("COZE_BOT_ID", ""),

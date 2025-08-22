@@ -1,8 +1,9 @@
 package models
 
 import (
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // AIModel AI模型配置
@@ -22,6 +23,8 @@ type AIModel struct {
 	IsDefault        bool           `json:"is_default" gorm:"default:false"`          // 是否为默认模型
 	ApiParameters    string         `json:"api_parameters" gorm:"type:json"`          // API参数(JSON格式)
 	Description      string         `json:"description" gorm:"type:text"`             // 模型描述
+	Class            string         `json:"class" gorm:"size:10"`                     // 大分类 workflow、bot、bigmodal
+	ClassId          string         `json:"class_id" gorm:"size:25"`                  // coze大分类的id,对应workflow_id,bot_id等
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt `json:"-"`

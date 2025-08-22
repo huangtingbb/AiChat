@@ -236,8 +236,8 @@ func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt strin
 
 // handleCozeStreamResponse 处理Coze流式响应
 func (s *AiService) handleCozeStreamResponse(aiModel *models.AIModel, prompt string, history []map[string]string, userId uint, callback func(chunk string, isEnd bool, err error) bool, startTime time.Time) error {
-	// 创建Coze服务
-	cozeService, err := NewCozeService()
+	// 创建Coze服务，传入模型配置
+	cozeService, err := NewCozeService(aiModel)
 	if err != nil {
 		// 创建错误记录
 		errorUsage := s.modelService.CreateModelUsageError(userId, aiModel.Id, prompt, "创建Coze服务失败: "+err.Error())
@@ -259,22 +259,26 @@ func (s *AiService) handleCozeStreamResponse(aiModel *models.AIModel, prompt str
 	// 用于收集完整响应以记录使用情况
 	var fullResponse strings.Builder
 	var hasError bool
+	var usageRecorded bool // 添加标志防止重复记录
 
 	// 定义内部回调函数，包装用户回调并处理使用记录
 	internalCallback := func(chunk string, isEnd bool, err error) bool {
 		if err != nil {
 			hasError = true
-			// 创建错误记录
-			errorUsage := s.modelService.CreateModelUsageError(userId, aiModel.Id, prompt, "Coze流式生成回复失败: "+err.Error())
-			if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
-				// 记录日志
+			// 创建错误记录（只记录一次）
+			if !usageRecorded {
+				errorUsage := s.modelService.CreateModelUsageError(userId, aiModel.Id, prompt, "Coze流式生成回复失败: "+err.Error())
+				if recordErr := s.modelService.RecordModelUsage(errorUsage); recordErr != nil {
+					// 记录日志
+				}
+				usageRecorded = true
 			}
 			return callback("", false, err)
 		}
 
 		if isEnd {
-			// 流式响应结束，记录使用情况（如果没有错误）
-			if !hasError {
+			// 流式响应结束，记录使用情况（如果没有错误且未记录过）
+			if !hasError && !usageRecorded {
 				duration := int(time.Since(startTime).Milliseconds())
 				response := fullResponse.String()
 
@@ -296,6 +300,7 @@ func (s *AiService) handleCozeStreamResponse(aiModel *models.AIModel, prompt str
 				if err := s.modelService.RecordModelUsage(usage); err != nil {
 					// 记录日志，但不影响返回结果
 				}
+				usageRecorded = true
 			}
 
 			return callback("", true, nil) // 通知用户回调流式响应结束

@@ -49,6 +49,161 @@ chatbot-app/
 
 ## 最新更新 (2025-01-27)
 
+### 🔧 AI模型结构体更新完成
+1. **AIModel结构体扩展**
+   - 添加`Class`字段：用于区分模型大分类（workflow、bot、bigmodal）
+   - 添加`ClassId`字段：存储Coze的bot_id或workflow_id等特定参数
+   - 完全兼容数据库表结构变更
+   - 支持从数据库动态获取Coze配置参数
+
+2. **Coze服务优化**
+   - 修改`CozeService`构造函数，支持传入`AIModel`参数
+   - 动态获取bot_id和workflow_id，不再依赖固定配置
+   - 根据模型的Class字段自动选择对话模式或工作流模式
+   - 完善的错误处理和参数验证
+
+3. **Coze客户端增强**
+   - 添加`NewWithParams`函数，支持动态设置bot_id和workflow_id
+   - 修改所有Coze API调用以使用动态参数
+   - 保持向后兼容性，支持环境变量配置作为默认值
+   - 优化Token缓存和认证机制
+
+4. **AI工厂模式完善**
+   - 更新AI客户端工厂以正确处理Coze模型参数
+   - 统一的模型配置管理机制
+   - 支持多种AI提供商的参数传递
+   - 改进的错误处理和日志记录
+
+5. **数据库集成**
+   - 完全支持`ai_model`表的新字段结构
+   - 自动从数据库读取Coze配置参数
+   - 支持动态切换不同的Coze智能体和工作流
+   - 保持使用记录和性能监控功能
+
+### 📋 模型参数动态化完成清单
+- ✅ **AIModel结构体**：添加Class和ClassId字段支持
+- ✅ **CozeService优化**：从AIModel动态获取配置参数
+- ✅ **Coze客户端增强**：支持动态参数设置
+- ✅ **AI工厂更新**：正确处理Coze模型参数传递
+- ✅ **向后兼容性**：保持环境变量配置支持
+- ✅ **错误处理**：完善的参数验证和错误处理
+- ✅ **数据库集成**：完全支持新的表结构
+
+### 🚀 使用示例
+现在可以通过数据库配置不同的Coze模型：
+
+```sql
+-- Coze智能体配置
+INSERT INTO ai_model (name, display_name, provider, type, class, class_id) 
+VALUES ('ai-customer', 'AI智能客服', 'coze', 'chat', 'bot', '7523118281046458395');
+
+-- Coze工作流配置  
+INSERT INTO ai_model (name, display_name, provider, type, class, class_id)
+VALUES ('ai-workflow', 'AI工作流', 'coze', 'chat', 'workflow', '7534632837212307495');
+```
+
+系统会自动根据`class`和`class_id`字段选择正确的Coze调用方式，无需修改代码配置。
+
+### 🔧 Coze配置问题修复
+
+如果遇到Coze智能体聊天报错，可以使用以下工具进行诊断：
+
+#### 1. 配置检查工具
+```bash
+cd chatbot-app/backend
+go run scripts/check_coze_config.go
+```
+
+此工具会检查：
+- 所有必需的环境变量是否设置
+- 私钥格式是否正确
+- 配置文件是否可读
+- Coze客户端是否能正常创建
+
+#### 2. 常见错误及解决方案
+
+**错误：`failed to parse private key: illegal base64 data`**
+- **原因**：私钥格式不正确或包含转义字符
+- **解决**：
+  1. 确保私钥是标准PEM格式
+  2. 如果通过环境变量设置，使用双引号包围并用`\n`表示换行
+  3. 或者将私钥保存为文件，使用`COZE_PRIVATE_KEY_FILE`指定路径
+
+**错误：`Coze Client ID未配置`**
+- **原因**：未设置`COZE_CLIENT_ID`环境变量
+- **解决**：在`.env`文件中设置正确的Client ID
+
+**错误：`获取AccessToken失败`**
+- **原因**：私钥与Client ID不匹配，或网络连接问题
+- **解决**：
+  1. 检查私钥和Client ID是否来自同一个Coze应用
+  2. 确认网络可以访问`https://api.coze.cn`
+  3. 检查Public Key ID是否正确
+
+#### 3. 私钥格式示例
+
+**正确的环境变量格式：**
+```bash
+COZE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC65VVMwDknri2h\n...(省略中间内容)...\n0GvDXbZJAgMBAAE=\n-----END PRIVATE KEY-----"
+```
+
+**或使用文件方式：**
+```bash
+COZE_PRIVATE_KEY_FILE="/path/to/coze_private_key.pem"
+```
+
+#### 4. 私钥测试工具
+```bash
+cd chatbot-app/backend
+go run examples/test_coze_private_key.go
+```
+
+此工具专门用于测试私钥格式和验证。
+
+### 🐛 Bug修复记录
+
+#### 修复Coze智能体重复记录使用情况的问题 (2025-01-27)
+
+**问题描述：**
+使用Coze智能体聊天时，同一个问题的回复被记录了两次到`ai_model_usage`表中，导致使用统计不准确。
+
+**根本原因分析：**
+1. **重复结束事件**：Coze API在流式响应结束时会触发两个不同的事件：
+   - `chat_completed`：对话完成事件
+   - `conversation_end`：会话结束事件（EOF时触发）
+
+2. **重复回调处理**：在`CozeService`中，这两个事件都会导致`callback("", true, nil)`被调用，从而触发使用记录逻辑两次。
+
+**修复方案：**
+1. **添加结束标志**：在CozeService的事件处理中添加`conversationEnded`和`workflowEnded`标志
+2. **防重复逻辑**：确保结束回调只被调用一次
+3. **统一记录**：在AI服务层添加`usageRecorded`标志防止重复记录
+
+**修复文件：**
+- `services/coze_service.go`：添加防重复结束回调逻辑
+- `services/ai_service.go`：添加使用记录防重复标志
+
+**验证方法：**
+```bash
+# 测试Coze智能体对话
+curl -X POST http://localhost:8080/api/chat/{id}/message \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_jwt_token" \
+  -d '{"content": "测试消息", "model_id": 25}'
+
+# 检查数据库记录
+SELECT COUNT(*) FROM ai_model_usage WHERE prompt = '测试消息';
+# 应该只返回1条记录
+```
+
+**修复效果：**
+- ✅ 消除了重复的使用记录
+- ✅ 保持了准确的Token统计
+- ✅ 修复了流式响应的重复结束问题
+- ✅ 保持了向后兼容性
+
+## 最新更新 (2025-01-27)
+
 ### 🤖 Coze智能体集成完成
 1. **Coze平台支持**
    - 完整集成Coze智能体平台

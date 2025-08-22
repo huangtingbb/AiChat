@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/coze-dev/coze-go"
@@ -18,8 +18,10 @@ const (
 )
 
 type Client struct {
-	Config *config.CozeConfig
-	Api    *coze.CozeAPI
+	Config     *config.CozeConfig
+	Api        *coze.CozeAPI
+	BotID      string // 动态设置的BotID
+	WorkflowID string // 动态设置的WorkflowID
 }
 
 func New() (*Client, error) {
@@ -36,7 +38,30 @@ func New() (*Client, error) {
 
 	cozeApi := coze.NewCozeAPI(coze.NewTokenAuth(token), coze.WithBaseURL(cozeConv.Config.APIURL), coze.WithHttpClient(httpClient))
 	cozeConv.Api = &cozeApi
+
+	// 设置默认的BotID和WorkflowID
+	cozeConv.BotID = cozeConv.Config.BotID
+	cozeConv.WorkflowID = cozeConv.Config.WorkFlowID
+
 	return cozeConv, nil
+}
+
+// NewWithParams 创建带有指定参数的Coze客户端
+func NewWithParams(botID, workflowID string) (*Client, error) {
+	client, err := New()
+	if err != nil {
+		return nil, err
+	}
+
+	// 覆盖动态参数
+	if botID != "" {
+		client.BotID = botID
+	}
+	if workflowID != "" {
+		client.WorkflowID = workflowID
+	}
+
+	return client, nil
 }
 
 func GetToken() (string, error) {
@@ -60,16 +85,17 @@ func GetToken() (string, error) {
 	var jwtOauthPrivateKey string
 	if cozeConfig.PrivateKey != "" {
 		jwtOauthPrivateKey = cozeConfig.PrivateKey
-	} else if cozeConfig.PrivateKeyFilePath != "" {
-		privateKeyBytes, err := os.ReadFile(cozeConfig.PrivateKeyFilePath)
-		if err != nil {
-			return "", fmt.Errorf("读取私钥文件失败: %v", err)
-		}
-		jwtOauthPrivateKey = string(privateKeyBytes)
 	} else {
 		return "", fmt.Errorf("未配置私钥")
 	}
-	fmt.Println(jwtOauthPrivateKey)
+
+	// 验证必需的配置参数
+	if cozeConfig.ClientID == "" {
+		return "", fmt.Errorf("Coze_Client_ID未配置，请设置COZE_CLIENT_ID环境变量")
+	}
+	if cozeConfig.PublicKeyID == "" {
+		return "", fmt.Errorf("COZE_PUBLIC_KEY_ID环境变量未配置，请设置COZE_PUBLIC_KEY_ID环境变量")
+	}
 
 	oauth, err := coze.NewJWTOAuthClient(coze.NewJWTOAuthClientParam{
 		PrivateKeyPEM: jwtOauthPrivateKey,
@@ -78,6 +104,10 @@ func GetToken() (string, error) {
 	}, coze.WithAuthBaseURL(cozeConfig.APIURL))
 
 	if err != nil {
+		// 提供更详细的错误信息
+		if strings.Contains(err.Error(), "private key") {
+			return "", fmt.Errorf("私钥格式错误: %v\n建议检查:\n1. 私钥是否为PEM格式\n2. 私钥是否完整包含头尾标记\n3. 私钥内容是否正确", err)
+		}
 		return "", fmt.Errorf("创建JWT OAuth客户端失败: %v", err)
 	}
 

@@ -8,25 +8,42 @@ import (
 
 // CozeService Coze智能体服务
 type CozeService struct {
-	client *coze.Client
+	client  *coze.Client
+	aiModel *models.AIModel // 添加模型信息以获取配置参数
 }
 
 // NewCozeService 创建Coze服务实例
-func NewCozeService() (*CozeService, error) {
-	client, err := coze.New()
+func NewCozeService(aiModel *models.AIModel) (*CozeService, error) {
+	var client *coze.Client
+	var err error
+
+	// 根据模型配置创建Coze客户端
+	if aiModel != nil && aiModel.ClassId != "" {
+		var botID, workflowID string
+		if aiModel.Class == "bot" {
+			botID = aiModel.ClassId
+		} else if aiModel.Class == "workflow" {
+			workflowID = aiModel.ClassId
+		}
+		client, err = coze.NewWithParams(botID, workflowID)
+	} else {
+		client, err = coze.New()
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("初始化Coze客户端失败: %v", err)
 	}
 
 	return &CozeService{
-		client: client,
+		client:  client,
+		aiModel: aiModel,
 	}, nil
 }
 
 // GenerateResponse 生成回复（非流式）
 func (s *CozeService) GenerateResponse(message string, history []*models.Message) (string, error) {
-	// 如果配置了工作流ID，使用工作流模式
-	if s.client.Config.WorkFlowID != "" {
+	// 根据模型配置判断使用工作流模式还是对话模式
+	if s.aiModel != nil && s.aiModel.Class == "workflow" && s.aiModel.ClassId != "" {
 		workflowResp, err := s.client.RunWorkflow(message)
 		if err != nil {
 			return "", fmt.Errorf("执行Coze工作流失败: %v", err)
@@ -53,8 +70,9 @@ func (s *CozeService) GenerateStreamResponse(message string, history []*models.M
 		return fmt.Errorf("创建Coze会话失败: %v", err)
 	}
 
-	// 如果配置了工作流ID，使用工作流模式
-	if s.client.Config.WorkFlowID != "" {
+	// 根据模型配置判断使用工作流模式还是对话模式
+	if s.aiModel != nil && s.aiModel.Class == "workflow" && s.aiModel.ClassId != "" {
+		var workflowEnded bool // 添加标志防止重复结束
 		return s.client.RunWorkflowStream(message, func(eventType string, data interface{}) {
 			switch eventType {
 			case "message_delta":
@@ -66,20 +84,28 @@ func (s *CozeService) GenerateStreamResponse(message string, history []*models.M
 					}
 				}
 			case "workflow_complated", "workflow_end":
-				callback("", true, nil)
-			case "workflow_error":
-				if dataMap, ok := data.(map[string]string); ok {
-					if errorContent, exists := dataMap["content"]; exists {
-						callback("", false, fmt.Errorf("工作流错误: %s", errorContent))
-						return
-					}
+				// 防止重复结束回调
+				if !workflowEnded {
+					workflowEnded = true
+					callback("", true, nil)
 				}
-				callback("", false, fmt.Errorf("工作流执行失败"))
+			case "workflow_error":
+				if !workflowEnded {
+					workflowEnded = true
+					if dataMap, ok := data.(map[string]string); ok {
+						if errorContent, exists := dataMap["content"]; exists {
+							callback("", false, fmt.Errorf("工作流错误: %s", errorContent))
+							return
+						}
+					}
+					callback("", false, fmt.Errorf("工作流执行失败"))
+				}
 			}
 		})
 	}
 
 	// 使用对话流式模式
+	var conversationEnded bool // 添加标志防止重复结束
 	return s.client.SendMessageStreamWithCallback(
 		conversationID,
 		userID,
@@ -97,15 +123,22 @@ func (s *CozeService) GenerateStreamResponse(message string, history []*models.M
 					}
 				}
 			case "chat_completed", "conversation_end":
-				callback("", true, nil)
-			case "chat_failed":
-				if dataMap, ok := data.(map[string]interface{}); ok {
-					if errorMsg, exists := dataMap["error_msg"]; exists {
-						callback("", false, fmt.Errorf("对话失败: %v", errorMsg))
-						return
-					}
+				// 防止重复结束回调
+				if !conversationEnded {
+					conversationEnded = true
+					callback("", true, nil)
 				}
-				callback("", false, fmt.Errorf("对话执行失败"))
+			case "chat_failed":
+				if !conversationEnded {
+					conversationEnded = true
+					if dataMap, ok := data.(map[string]interface{}); ok {
+						if errorMsg, exists := dataMap["error_msg"]; exists {
+							callback("", false, fmt.Errorf("对话失败: %v", errorMsg))
+							return
+						}
+					}
+					callback("", false, fmt.Errorf("对话执行失败"))
+				}
 			}
 		},
 	)
@@ -118,15 +151,24 @@ func (s *CozeService) GetConversationID() (string, error) {
 
 // IsWorkflowMode 检查是否为工作流模式
 func (s *CozeService) IsWorkflowMode() bool {
+	if s.aiModel != nil {
+		return s.aiModel.Class == "workflow" && s.aiModel.ClassId != ""
+	}
 	return s.client.Config.WorkFlowID != ""
 }
 
 // GetBotID 获取机器人ID
 func (s *CozeService) GetBotID() string {
+	if s.aiModel != nil && s.aiModel.Class == "bot" {
+		return s.aiModel.ClassId
+	}
 	return s.client.Config.BotID
 }
 
 // GetWorkflowID 获取工作流ID
 func (s *CozeService) GetWorkflowID() string {
+	if s.aiModel != nil && s.aiModel.Class == "workflow" {
+		return s.aiModel.ClassId
+	}
 	return s.client.Config.WorkFlowID
 }
