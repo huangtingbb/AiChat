@@ -169,10 +169,9 @@ func GetAllValidationErrors(obj interface{}) string {
 }
 
 // ValidateStructWithTagMessages 验证结构体并使用结构体标签中的自定义错误消息
-func ValidateStructWithTagMessages(obj interface{}) []ValidateError {
+func ValidateStructWithTagMessages(obj interface{}, err error) []ValidateError {
 	var errors []ValidateError
 
-	err := validate.Struct(obj)
 	if err != nil {
 		// 获取结构体类型信息
 		val := reflect.ValueOf(obj)
@@ -219,8 +218,8 @@ func ValidateStructWithTagMessages(obj interface{}) []ValidateError {
 }
 
 // GetValidationErrorWithTagMessages 获取第一个验证错误消息（使用结构体标签）
-func GetValidationErrorWithTagMessages(obj interface{}) string {
-	errors := ValidateStructWithTagMessages(obj)
+func GetValidationErrorWithTagMessages(obj interface{}, err error) string {
+	errors := ValidateStructWithTagMessages(obj, err)
 	if len(errors) > 0 {
 		return errors[0].Message
 	}
@@ -228,8 +227,8 @@ func GetValidationErrorWithTagMessages(obj interface{}) string {
 }
 
 // GetAllValidationErrorsWithTagMessages 获取所有验证错误消息（使用结构体标签），用分号分隔
-func GetAllValidationErrorsWithTagMessages(obj interface{}) string {
-	errors := ValidateStructWithTagMessages(obj)
+func GetAllValidationErrorsWithTagMessages(obj interface{}, err error) string {
+	errors := ValidateStructWithTagMessages(obj, err)
 	if len(errors) == 0 {
 		return ""
 	}

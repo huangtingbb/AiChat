@@ -13,8 +13,9 @@ import (
 type ChatService struct{}
 
 // CreateChat 创建聊天会话
-func (s *ChatService) CreateChat(userId uint, title string) (*models.Chat, error) {
+func (s *ChatService) CreateChat(chatType string, userId uint, title string) (*models.Chat, error) {
 	chat := &models.Chat{
+		Type:      chatType,
 		UserId:    userId,
 		Title:     title,
 		CreatedAt: time.Now(),

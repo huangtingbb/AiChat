@@ -155,6 +155,8 @@ paths:
           properties:
             title:
               type: string
+            type:
+              type: string
           type: object
       produces:
       - application/json
@@ -235,7 +237,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 在指定聊天会话中发送消息并获取AI回复
+      description: 在指定聊天会话中发送消息并获取AI流式回复
       parameters:
       - description: 聊天会话Id
         in: path
@@ -254,24 +256,12 @@ paths:
               type: integer
           type: object
       produces:
-      - application/json
+      - text/event-stream
       responses:
         "200":
-          description: 发送成功，返回用户消息、AI回复及指标
+          description: Server-Sent Events流式响应
           schema:
-            allOf:
-            - $ref: '#/definitions/utils.Response'
-            - properties:
-                data:
-                  properties:
-                    bot_message:
-                      type: object
-                    metrics:
-                      type: object
-                    user_message:
-                      type: object
-                  type: object
-              type: object
+            type: string
         "400":
           description: 参数错误
           schema:
@@ -290,7 +280,7 @@ paths:
             $ref: '#/definitions/utils.Response'
       security:
       - Bearer: []
-      summary: 发送聊天消息
+      summary: 发送聊天消息（流式响应）
       tags:
       - 聊天
   /api/user/info:

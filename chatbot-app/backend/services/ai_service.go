@@ -58,7 +58,7 @@ func NewAiService() *AiService {
 // loadDefaultModelFromDB 从数据库加载默认模型
 func (s *AiService) loadDefaultModelFromDB() {
 	// 从数据库获取默认模型
-	defaultModel, err := s.modelService.GetDefaultModel()
+	defaultModel, err := s.modelService.GetDefaultModel("chat")
 	if err == nil {
 		s.mu.Lock()
 		s.model = defaultModel.Name
@@ -68,7 +68,7 @@ func (s *AiService) loadDefaultModelFromDB() {
 		s.mu.Unlock()
 	} else {
 		// 如果没有默认模型，获取所有可用模型并选择第一个
-		modelList, err := s.modelService.GetAllModelList()
+		modelList, err := s.modelService.GetAllModelList("")
 		if err == nil && len(modelList) > 0 {
 			s.mu.Lock()
 			s.model = modelList[0].Name
@@ -149,7 +149,7 @@ func (s *AiService) GenerateStreamResponse(aiModel *models.AIModel, prompt strin
 
 	// 如果没有指定模型，获取默认模型
 	if aiModel == nil {
-		defaultModel, err := s.modelService.GetDefaultModel()
+		defaultModel, err := s.modelService.GetDefaultModel("chat")
 		if err != nil {
 			return errors.New("获取默认模型失败: " + err.Error())
 		}

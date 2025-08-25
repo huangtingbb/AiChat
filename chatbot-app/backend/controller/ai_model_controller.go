@@ -26,28 +26,48 @@ func NewAIModelController() *AIModelController {
 
 // GetAvailableModelList 获取可用模型列表
 // @Summary 获取可用模型列表
-// @Description 获取系统中所有可用的AI模型列表及当前使用的模型
+// @Description 获取系统中所有可用的AI模型列表及当前使用的模型，可按类型过滤
 // @Tags AI模型
 // @Accept json
 // @Produce json
 // @Security Bearer
+// @Param type query string false "模型类型" Enums(chat,image,video)
 // @Success 200 {object} utils.Response{data=object{models=array,current_model=string}} "模型列表"
 // @Failure 401 {object} utils.Response "未授权"
 // @Failure 500 {object} utils.Response "服务器错误"
 // @Router /api/ai/model [get]
 func (controller *AIModelController) GetAvailableModelList(c *gin.Context) {
-	modelList, err := controller.aiModelService.GetAllModelList()
+	// 获取可选的type参数
+	chatType := c.DefaultQuery("type", "")
+
+	utils.LogInfo("获取模型列表请求", map[string]interface{}{
+		"type": chatType,
+	})
+
+	var modelList []models.AIModel
+	var err error
+
+	// 获取模型
+	modelList, err = controller.aiModelService.GetAllModelList(chatType)
+
 	if err != nil {
-		utils.LogError("获取模型列表失败", err)
+		utils.LogError("获取模型列表失败", err, map[string]interface{}{
+			"type": chatType,
+		})
 		utils.Error(c, "获取模型列表失败: "+err.Error())
 		return
 	}
 
-	defaultModel, _ := controller.aiModelService.GetDefaultModel()
+	defaultModel, _ := controller.aiModelService.GetDefaultModel(chatType)
+
+	if defaultModel == nil {
+		defaultModel = &modelList[0]
+	}
 
 	utils.Success(c, gin.H{
 		"models":        modelList,
 		"current_model": defaultModel,
+		"type":          chatType,
 	})
 }
 

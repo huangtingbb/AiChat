@@ -31,13 +31,13 @@ func NewUserController() *UserController {
 // @Router /api/user/register [post]
 func (controller *UserController) Register(c *gin.Context) {
 	var req struct {
-		Username string `json:"username" validate:"required,min=3,max=50" msg_required:"请输入用户名" msg_min:"用户名至少需3个字符" msg_max:"用户名不能超过50个字符"`
-		Password string `json:"password" validate:"required,min=6,max=50" msg_required:"请设置密码" msg_min:"密码至少需6位数" msg_max:"密码不能超过50位"`
-		Email    string `json:"email" validate:"required,email" msg_required:"请输入邮箱地址" msg_email:"邮箱格式不正确"`
+		Username string `json:"username" binding:"required,min=3,max=50" msg_required:"请输入用户名" msg_min:"用户名至少需3个字符" msg_max:"用户名不能超过50个字符"`
+		Password string `json:"password" binding:"required,min=6,max=50" msg_required:"请设置密码" msg_min:"密码至少需6位数" msg_max:"密码不能超过50位"`
+		Email    string `json:"email" binding:"required,email" msg_required:"请输入邮箱地址" msg_email:"邮箱格式不正确"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		validationError := utils.GetValidationErrorWithTagMessages(req)
+		validationError := utils.GetValidationErrorWithTagMessages(req, err)
 		utils.LogWarn("用户注册参数验证失败", map[string]interface{}{
 			"error": validationError,
 			"ip":    c.ClientIP(),
@@ -45,16 +45,6 @@ func (controller *UserController) Register(c *gin.Context) {
 		utils.InvalidParams(c, validationError)
 		return
 	}
-
-	//// 使用结构体标签自定义错误消息进行验证
-	//if validationError := utils.GetValidationErrorWithTagMessages(req); validationError != "" {
-	//	utils.LogWarn("用户注册参数验证失败", map[string]interface{}{
-	//		"error": validationError,
-	//		"ip":    c.ClientIP(),
-	//	})
-	//	utils.InvalidParams(c, validationError)
-	//	return
-	//}
 
 	utils.LogInfo("用户注册请求", map[string]interface{}{
 		"username": req.Username,
@@ -96,12 +86,12 @@ func (controller *UserController) Register(c *gin.Context) {
 func (controller *UserController) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" form:"username" binding:"required" msg_required:"请输入用户名"`
-		Password string `json:"password" form:"password" binding:"required,min=6" validate:"required,min=6"`
+		Password string `json:"password" form:"password" binding:"required,min=6"`
 	}
 
 	if err := c.ShouldBind(&req); err != nil {
 		// 使用自定义验证器进行验证
-		validationError := utils.GetValidationErrorWithTagMessages(req)
+		validationError := utils.GetValidationErrorWithTagMessages(req, err)
 		utils.LogWarn("用户登录参数验证失败", map[string]interface{}{
 			"error": validationError,
 			"ip":    c.ClientIP(),

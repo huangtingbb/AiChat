@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS user (
 -- 聊天会话表
 CREATE TABLE IF NOT EXISTS chat (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '会话Id',
+    type CHAR(10) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '对话类型:chat=聊天,image=图片,video=视频',
     user_id INT UNSIGNED NOT NULL COMMENT '用户Id',
     title VARCHAR(100) COMMENT '会话标题',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

@@ -7,8 +7,45 @@
           <div class="small-logo-circle"></div>
           <h3>AI聊天助手</h3>
         </div>
-        <el-button type="primary" size="small" @click="createTempChat" :loading="chatStore.loading" class="new-chat-button">
-          新建对话
+        <!-- 功能Tab区域 -->
+        <div class="sidebar-tabs">
+          <div class="tab-list">
+            <div 
+              class="tab-item" 
+              :class="{ active: activeTab === 'chat' }" 
+              @click="switchTab('chat')"
+            >
+              <el-icon><ChatDotRound /></el-icon>
+              对话
+            </div>
+            <div 
+              class="tab-item" 
+              :class="{ active: activeTab === 'image' }" 
+              @click="switchTab('image')"
+            >
+              <el-icon><Picture /></el-icon>
+              图片生成
+            </div>
+            <div 
+              class="tab-item" 
+              :class="{ active: activeTab === 'video' }" 
+              @click="switchTab('video')"
+            >
+              <el-icon><VideoPlay /></el-icon>
+              视频生成
+            </div>
+          </div>
+        </div>
+        
+        <!-- 新建按钮 - 根据当前tab显示不同文字 -->
+        <el-button 
+          type="primary" 
+          size="small" 
+          @click="createNew" 
+          :loading="chatStore.loading" 
+          class="new-chat-button"
+        >
+          {{ getNewButtonText() }}
         </el-button>
       </div>
       
@@ -73,7 +110,7 @@
           <span class="username">{{ userStore.username }}</span>
         </div>
         <el-button type="danger" size="small" @click="logout" class="logout-button">
-          <el-icon><Close /></el-icon> 退出登录
+          <el-icon><Close /></el-icon> 退出登录 
         </el-button>
       </div>
     </div>
@@ -260,7 +297,9 @@ import {
   FullScreen,
   Upload,
   Position,
-  ArrowDown
+  ArrowDown,
+  Picture,
+  VideoPlay
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -294,6 +333,9 @@ const availableModels = ref([]) // 不再预设默认模型
 const selectedModel = ref(null) // 初始化为null，等待接口返回
 const modelList = ref([]) // 从服务器获取的模型列表
 
+// Tab相关
+const activeTab = ref('chat') // 默认激活对话tab
+
 // 选择模型的方法
 const selectModel = (model) => {
   selectedModel.value = model
@@ -302,6 +344,49 @@ const selectModel = (model) => {
 // 处理下拉菜单选择模型
 const handleModelSelect = (model) => {
   selectModel(model)
+}
+
+// 切换Tab的方法
+const switchTab = (tabName) => {
+  activeTab.value = tabName
+  console.log('切换到tab:', tabName)
+  // 暂时不改变逻辑，只是切换显示状态
+}
+
+// 获取新建按钮的文字
+const getNewButtonText = () => {
+  switch (activeTab.value) {
+    case 'chat':
+      return '新建对话'
+    case 'image':
+      return '图片生成'
+    case 'video':
+      return '视频生成'
+    default:
+      return '新建对话'
+  }
+}
+
+// 根据当前tab创建新的内容
+const createNew = () => {
+  switch (activeTab.value) {
+    case 'chat':
+      createTempChat()
+      break
+    case 'image':
+      console.log('创建新图片生成任务')
+      // 暂时调用聊天逻辑
+      createTempChat()
+      break
+    case 'video':
+      console.log('创建新视频生成任务')
+      // 暂时调用聊天逻辑
+      createTempChat()
+      break
+    default:
+      createTempChat()
+      break
+  }
 }
 
 // 获取可用的模型
@@ -756,6 +841,56 @@ onMounted(async () => {
   height: 38px;
   border-radius: 8px;
   font-weight: 500;
+}
+
+/* 侧边栏Tab样式 */
+.sidebar-tabs {
+  margin-bottom: 12px;
+}
+
+.tab-list {
+  display: flex;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: var(--muted-text);
+  background-color: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.tab-item .el-icon {
+  font-size: 16px;
+}
+
+.tab-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-color);
+  transform: translateY(-1px);
+}
+
+.tab-item.active {
+  background-color: var(--accent-color);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 229, 255, 0.3);
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
 }
 
 .chat-list {

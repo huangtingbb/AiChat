@@ -238,6 +238,9 @@
                             "properties": {
                                 "title": {
                                     "type": "string"
+                                },
+                                "type": {
+                                    "type": "string"
                                 }
                             }
                         }
@@ -366,17 +369,17 @@
                         "Bearer": []
                     }
                 ],
-                "description": "在指定聊天会话中发送消息并获取AI回复",
+                "description": "在指定聊天会话中发送消息并获取AI流式回复",
                 "consumes": [
                     "application/json"
                 ],
                 "produces": [
-                    "application/json"
+                    "text/event-stream"
                 ],
                 "tags": [
                     "聊天"
                 ],
-                "summary": "发送聊天消息",
+                "summary": "发送聊天消息（流式响应）",
                 "parameters": [
                     {
                         "type": "integer",
@@ -405,32 +408,9 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "发送成功，返回用户消息、AI回复及指标",
+                        "description": "Server-Sent Events流式响应",
                         "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "object",
-                                            "properties": {
-                                                "bot_message": {
-                                                    "type": "object"
-                                                },
-                                                "metrics": {
-                                                    "type": "object"
-                                                },
-                                                "user_message": {
-                                                    "type": "object"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
+                            "type": "string"
                         }
                     },
                     "400": {

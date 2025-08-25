@@ -9,6 +9,7 @@ import (
 // Chat 聊天会话模型
 type Chat struct {
 	Id        uint           `json:"id" gorm:"primaryKey"`
+	Type      string         `json:"type" gorm:"not null" `
 	UserId    uint           `json:"user_id" gorm:"not null;index"`
 	Title     string         `json:"title" gorm:"size:100"`
 	CreatedAt time.Time      `json:"created_at"`

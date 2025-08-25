@@ -35,7 +35,7 @@ func NewChatController() *ChatController {
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Param body body object{title=string} true "聊天会话标题"
+// @Param body body object{title=string,type=string} true "聊天会话标题"
 // @Success 200 {object} utils.Response{data=object} "创建成功"
 // @Failure 400 {object} utils.Response "参数错误"
 // @Failure 401 {object} utils.Response "未授权"
@@ -43,20 +43,13 @@ func NewChatController() *ChatController {
 // @Router /api/chat [post]
 func (controller *ChatController) CreateChat(c *gin.Context) {
 	var req struct {
-		Title string `json:"title" binding:"required" validate:"required"`
+		Title string `json:"title" binding:"required"`
+		Type  string `json:"type" binding:"required" msg_required:"会话类型不能为空"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.LogWarn("创建聊天会话参数验证失败", map[string]interface{}{
-			"error": err.Error(),
-			"ip":    c.ClientIP(),
-		})
-		utils.InvalidParams(c, err.Error())
-		return
-	}
-
-	// 使用自定义验证器进行验证
-	if validationError := utils.GetValidationError(req); validationError != "" {
+		// 使用自定义验证器进行验证
+		validationError := utils.GetValidationErrorWithTagMessages(req, err)
 		utils.LogWarn("创建聊天会话参数验证失败", map[string]interface{}{
 			"error": validationError,
 			"ip":    c.ClientIP(),
@@ -81,7 +74,7 @@ func (controller *ChatController) CreateChat(c *gin.Context) {
 		"ip":      c.ClientIP(),
 	})
 
-	chat, err := controller.chatService.CreateChat(userId, req.Title)
+	chat, err := controller.chatService.CreateChat(req.Type, userId, req.Title)
 	if err != nil {
 		utils.LogError("创建聊天会话失败", err, map[string]interface{}{
 			"user_id": userId,
@@ -214,17 +207,13 @@ func (controller *ChatController) SendMessage(c *gin.Context) {
 	}
 
 	var req struct {
-		Content string `json:"content" binding:"required" validate:"required"`
-		ModelId uint   `json:"model_id" binding:"required" validate:"required"` // 模型Id
+		Content string `json:"content" binding:"required" msg_required:"请输入内容"`
+		ModelId uint   `json:"model_id" binding:"required" msg_required:"请选择模型"` // 模型Id
+		Type    string `json:"type"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.InvalidParams(c, err.Error())
-		return
-	}
-
-	// 使用自定义验证器进行验证
-	if validationError := utils.GetValidationError(req); validationError != "" {
+		validationError := utils.GetValidationErrorWithTagMessages(req, err)
 		utils.LogWarn("发送消息参数验证失败", map[string]interface{}{
 			"error": validationError,
 			"ip":    c.ClientIP(),

@@ -12,9 +12,13 @@ import (
 type AIModelService struct{}
 
 // GetAllModelList 获取所有启用的AI模型
-func (s *AIModelService) GetAllModelList() ([]models.AIModel, error) {
+func (s *AIModelService) GetAllModelList(chatType string) ([]models.AIModel, error) {
 	var aiModelList []models.AIModel
-	if err := database.DB.Where("enabled = ?", true).Find(&aiModelList).Error; err != nil {
+	query := database.DB.Where("enabled = ?", true)
+	if chatType != "" {
+		query = query.Where("type = ?", chatType)
+	}
+	if err := query.Find(&aiModelList).Error; err != nil {
 		return nil, err
 	}
 	return aiModelList, nil
@@ -39,9 +43,13 @@ func (s *AIModelService) GetModelByName(name string) (*models.AIModel, error) {
 }
 
 // GetDefaultModel 获取默认AI模型
-func (s *AIModelService) GetDefaultModel() (*models.AIModel, error) {
+func (s *AIModelService) GetDefaultModel(chatType string) (*models.AIModel, error) {
 	var aiModel models.AIModel
-	if err := database.DB.Where("is_default = ? AND enabled = ?", true, true).First(&aiModel).Error; err != nil {
+	query := database.DB.Where("is_default = ? AND enabled = ?", true, true)
+	if chatType != "" {
+		query = query.Where("type = ?", chatType)
+	}
+	if err := query.First(&aiModel).Error; err != nil {
 		return nil, errors.New("未找到默认模型")
 	}
 	return &aiModel, nil
